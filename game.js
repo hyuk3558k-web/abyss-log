@@ -1217,7 +1217,7 @@ const GAME = (() => {
     if (!coopOn()) return;
     R.sendT -= dt;
     if (R.sendT <= 0) {
-      R.sendT = NET.isHost ? 1 / 12 : 1 / 15;
+      R.sendT = NET.relay ? 1 / 8 : NET.isHost ? 1 / 12 : 1 / 15; // 중계 서버를 거칠 때는 조금 덜 자주
       const W = curW();
       const me = [r2(P.pos.x), r2(P.pos.y), r2(P.pos.z), r2(P.yaw), r2(P.pitch), P.dead ? 1 : 0, Math.round(P.hp), W ? W.g.id : ''];
       if (NET.isHost) NET.send({ t: 'w', p: me, c: CREATURES.snap(), m: MISSIONRT.snap() });
