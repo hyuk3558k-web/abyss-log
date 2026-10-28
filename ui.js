@@ -318,6 +318,9 @@ const UI = (() => {
   // ---------------------------------------------------------------
   function showPause() { syncSettings(); only('pause'); $('hud').hidden = true; $('touch').hidden = true; }
   $('btnResume').onclick = () => GAME.resume();
+  // 핸드폰 버튼 배치 바꾸기 (일시정지 화면 · 처음 화면)
+  $('btnTouchEdit').onclick = () => { $('pause').hidden = true; GAME.editTouch(() => showPause()); };
+  $('btnTouchEdit2').onclick = () => { $('title').hidden = true; GAME.editTouch(() => showTitle()); };
   $('btnQuit').onclick = () => GAME.quitToCamp();
   const statsHtml = r => `<div><span class="lbl">처치</span><b>${r.kills}</b></div><div><span class="lbl">샘플</span><b>${r.samples}</b></div><div><span class="lbl">번 돈</span><b>${fmt(r.money)}</b></div>`;
   function showDeath(r) { only('death'); $('hud').hidden = true; $('touch').hidden = true; $('deathStats').innerHTML = statsHtml(r); }

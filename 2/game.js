@@ -955,7 +955,7 @@ const GAME = (() => {
   function setupTouch() {
     const layer = $('touch'), stick = $('stick'), knob = $('knob');
     layer.addEventListener('touchstart', e => {
-      e.preventDefault(); AU.init();
+      e.preventDefault(); if (tedit) return; AU.init();
       for (const t of e.changedTouches) {
         if (t.target.closest && t.target.closest('.tbtn')) continue;
         if (t.clientX < innerWidth * .42 && touch.stickId === null) { touch.stickId = t.identifier; touch.sx = t.clientX; touch.sy = t.clientY; stick.style.display = 'block'; stick.style.left = t.clientX + 'px'; stick.style.top = t.clientY + 'px'; }
@@ -963,10 +963,11 @@ const GAME = (() => {
       }
     }, { passive: false });
     layer.addEventListener('touchmove', e => {
-      e.preventDefault();
+      e.preventDefault(); if (tedit) return;
       for (const t of e.changedTouches) {
         if (t.identifier === touch.stickId) {
-          let dx = (t.clientX - touch.sx) / 50, dy = (t.clientY - touch.sy) / 50; const l = Math.hypot(dx, dy); if (l > 1) { dx /= l; dy /= l; }
+          const sr = 50 * (SAVE.stickS || 1); // 조이스틱이 크면 더 멀리 밀어야 끝까지 간다
+          let dx = (t.clientX - touch.sx) / sr, dy = (t.clientY - touch.sy) / sr; const l = Math.hypot(dx, dy); if (l > 1) { dx /= l; dy /= l; }
           touch.mx = dx; touch.my = dy; touch.sprint = dy < -.95; knob.style.transform = `translate(${dx * 35}px, ${dy * 35}px)`;
         } else if (t.identifier === touch.lookId) {
           const W = curW(), z = W ? 1 + (W.st.zoom - 1) * RUN.aim : 1;
@@ -977,7 +978,7 @@ const GAME = (() => {
     }, { passive: false });
     const end = e => { for (const t of e.changedTouches) { if (t.identifier === touch.stickId) { touch.stickId = null; touch.mx = touch.my = 0; touch.sprint = false; stick.style.display = 'none'; knob.style.transform = ''; } if (t.identifier === touch.lookId) touch.lookId = null; } };
     layer.addEventListener('touchend', end); layer.addEventListener('touchcancel', end);
-    const btn = (id, down, up) => { const el = $(id); el.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); AU.init(); down(); }, { passive: false }); if (up) { el.addEventListener('touchend', e => { e.preventDefault(); up(); }); el.addEventListener('touchcancel', up); } };
+    const btn = (id, down, up) => { const el = $(id); el.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); if (tedit) return; AU.init(); down(); }, { passive: false }); if (up) { el.addEventListener('touchend', e => { e.preventDefault(); up(); }); el.addEventListener('touchcancel', up); } };
     btn('tFire', () => { touch.fire = true; input.firePressed = true; }, () => { touch.fire = false; });
     btn('tAim', () => { touch.aim = !touch.aim; $('tAim').classList.toggle('on', touch.aim); });
     btn('tJump', jump); btn('tReload', startReload);
@@ -987,6 +988,81 @@ const GAME = (() => {
     btn('tPause', pause);
   }
   setupTouch();
+
+  // ---------------------------------------------------------------
+  //  핸드폰 버튼 배치: 끌어서 옮기고, 크기를 바꾸고, 저장한다
+  //  SAVE.touchLayout[id] = { x, y (화면 가로·세로 비율로 버튼 가운데), s (크기 배율) }
+  // ---------------------------------------------------------------
+  const TBTN = { tFire: '발사', tAim: '조준', tJump: '점프', tReload: '장전', tSwap: '무기 바꾸기', tUse: 'E (샘플·보고)', tScan: '스캔', tPause: '멈춤' };
+  function applyTouchLayout() {
+    const L = SAVE.touchLayout || {};
+    Object.keys(TBTN).forEach(id => {
+      const el = $(id), p = L[id];
+      if (!p) { el.style.left = el.style.top = el.style.right = el.style.bottom = el.style.margin = el.style.transform = ''; return; }
+      Object.assign(el.style, { left: p.x * 100 + '%', top: p.y * 100 + '%', right: 'auto', bottom: 'auto', margin: '0', transform: `translate(-50%, -50%) scale(${p.s})` });
+    });
+    $('stick').style.transform = `scale(${SAVE.stickS || 1})`;
+  }
+  applyTouchLayout();
+  let tedit = null;
+  function editTouch(done) {
+    if (tedit) return;
+    const layer = $('touch'); layer.hidden = false; layer.classList.add('editing'); $('tedit').hidden = false; $('tedit').style.cssText = '';
+    const stick = $('stick'); stick.style.display = 'block'; stick.style.left = '22%'; stick.style.top = '68%';
+    // 아직 옮긴 적 없는 버튼은 지금 자리를 그대로 적어 둔다
+    const L = SAVE.touchLayout = SAVE.touchLayout || {};
+    Object.keys(TBTN).forEach(id => {
+      if (L[id]) return;
+      const r = $(id).getBoundingClientRect();
+      L[id] = { x: (r.left + r.width / 2) / innerWidth, y: (r.top + r.height / 2) / innerHeight, s: 1 };
+    });
+    applyTouchLayout();
+    const size = $('teSize'), stickR = $('teStick');
+    const sel = id => {
+      tedit.sel = id; Object.keys(TBTN).forEach(k => $(k).classList.toggle('sel', k === id));
+      $('teSelN').textContent = TBTN[id] + ' 버튼'; size.value = L[id].s; $('teSizeV').textContent = Math.round(L[id].s * 100) + '%';
+    };
+    const panel = $('tedit'), bar = panel.querySelector('.tt');
+    const down = e => {
+      const el = e.target.closest('.tbtn'); if (!el) return;
+      e.preventDefault(); e.stopPropagation(); sel(el.id);
+      tedit.drag = { id: el.id, pid: e.pointerId, ox: e.clientX - L[el.id].x * innerWidth, oy: e.clientY - L[el.id].y * innerHeight };
+      panel.classList.add('ghost'); // 버튼을 옮기는 동안은 설정 창이 흐려져서 뒤가 보인다
+    };
+    // 설정 창도 제목 줄을 잡고 끌어서 옮길 수 있다 (뒤에 가려진 버튼을 꺼내려고)
+    const barDown = e => {
+      e.preventDefault(); const r = panel.getBoundingClientRect();
+      tedit.drag = { panel: true, pid: e.pointerId, ox: e.clientX - r.left, oy: e.clientY - r.top };
+    };
+    const move = e => {
+      const d = tedit.drag; if (!d || e.pointerId !== d.pid) return;
+      e.preventDefault();
+      if (d.panel) {
+        const r = panel.getBoundingClientRect();
+        Object.assign(panel.style, { left: clamp(e.clientX - d.ox, 0, innerWidth - r.width) + 'px', top: clamp(e.clientY - d.oy, 0, innerHeight - r.height) + 'px', transform: 'none' });
+        return;
+      }
+      L[d.id].x = clamp((e.clientX - d.ox) / innerWidth, .03, .97); L[d.id].y = clamp((e.clientY - d.oy) / innerHeight, .03, .97);
+      applyTouchLayout();
+    };
+    const up = e => { if (tedit.drag && e.pointerId === tedit.drag.pid) { tedit.drag = null; panel.classList.remove('ghost'); } };
+    layer.addEventListener('pointerdown', down); bar.addEventListener('pointerdown', barDown);
+    addEventListener('pointermove', move, { passive: false }); addEventListener('pointerup', up); addEventListener('pointercancel', up);
+    size.oninput = () => { L[tedit.sel].s = +size.value; $('teSizeV').textContent = Math.round(size.value * 100) + '%'; applyTouchLayout(); };
+    stickR.value = SAVE.stickS || 1; $('teStickV').textContent = Math.round(stickR.value * 100) + '%';
+    stickR.oninput = () => { SAVE.stickS = +stickR.value; $('teStickV').textContent = Math.round(stickR.value * 100) + '%'; applyTouchLayout(); };
+    $('teAll').onclick = () => { const s = L[tedit.sel].s; Object.keys(TBTN).forEach(k => L[k].s = s); applyTouchLayout(); };
+    $('teReset').onclick = () => { SAVE.touchLayout = null; SAVE.stickS = 1; close(); editTouch(done); };
+    const close = () => {
+      layer.removeEventListener('pointerdown', down); bar.removeEventListener('pointerdown', barDown); removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up);
+      Object.keys(TBTN).forEach(k => $(k).classList.remove('sel'));
+      layer.classList.remove('editing'); layer.hidden = true; $('tedit').hidden = true; stick.style.display = 'none';
+      tedit = null; applyTouchLayout(); save();
+    };
+    $('teDone').onclick = () => { close(); done && done(); };
+    tedit = { sel: null, drag: null };
+    sel('tFire');
+  }
 
   addEventListener('resize', () => {
     renderer.setSize(innerWidth, innerHeight);
@@ -1041,7 +1117,7 @@ const GAME = (() => {
   void menuScene;
 
   return {
-    SAVE, save, load, resetSave, modsOf, renderer, startLevel, resume, pause, quitToCamp, isTouch,
+    SAVE, save, load, resetSave, modsOf, renderer, startLevel, resume, pause, quitToCamp, isTouch, editTouch,
     get state() { return state; }, set state(v) { state = v; },
     setSens(v) { SAVE.sens = v; save(); }, setVol(v) { SAVE.vol = v; AU.setVolume(v); save(); },
     // 시험용: 화면을 그리지 않고 게임 시간을 앞으로 돌린다

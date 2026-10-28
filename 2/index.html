@@ -141,6 +141,19 @@ button { font-family: inherit; color: inherit; }
 #tUse { width: 54px; height: 54px; left: 50%; margin-left: 40px; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); border-color: var(--bio); }
 #tScan { width: 54px; height: 54px; left: 50%; margin-left: -94px; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); border-color: var(--bio); }
 #tPause { width: 40px; height: 40px; left: 50%; margin-left: -20px; top: calc(10px + env(safe-area-inset-top, 0px)); }
+/* 핸드폰 버튼 배치 바꾸기 */
+#touch.editing { background: rgba(5,5,7,.6); z-index: 40; }
+#touch.editing .tbtn { outline: 2px dashed rgba(255,255,255,.35); outline-offset: 3px; cursor: grab; }
+#touch.editing .tbtn.sel { outline-color: var(--lamp); border-color: var(--lamp); color: var(--lamp); }
+#tedit { position: fixed; left: 50%; top: 26%; transform: translateX(-50%); z-index: 41; width: min(400px, 88vw); background: var(--panel); border: 1px solid var(--line); border-top: 3px solid var(--lamp); padding: 12px 14px; display: grid; gap: 10px; font-size: 14px; }
+#tedit .tt { font-weight: 600; cursor: move; touch-action: none; padding: 2px 0; }
+#tedit .tt small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+#tedit.ghost { opacity: .18; pointer-events: none; transition: opacity .15s; }
+@media (max-height: 500px) { #tedit { top: 8px; padding: 8px 12px; gap: 6px; } #tedit .tip { display: none; } }
+#tedit .tip { color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+#tedit .rowS { display: grid; grid-template-columns: 7.5em 1fr 3.2em; gap: 8px; align-items: center; }
+#tedit input { accent-color: var(--lamp); width: 100%; }
+#tedit .mono { text-align: right; }
 body.touch .pc { display: none; }
 body:not(.touch) .tc { display: none; }
 
@@ -331,6 +344,14 @@ h1 span { color: var(--lamp); }
   <button class="tbtn" id="tPause" type="button">II</button>
 </div>
 
+<div id="tedit" hidden>
+  <div class="tt">✥ 📱 핸드폰 버튼 배치 바꾸기 <small>(여기를 끌면 이 창이 움직여요)</small></div>
+  <div class="tip">버튼을 손가락으로 끌어서 원하는 곳에 놓아요. 버튼을 누르면 노랗게 바뀌고, 아래에서 그 버튼의 크기를 바꿀 수 있어요.</div>
+  <div class="rowS"><span id="teSelN">발사 버튼</span><input id="teSize" type="range" min=".5" max="2" step=".05"><span id="teSizeV" class="mono"></span></div>
+  <div class="rowS"><span>조이스틱</span><input id="teStick" type="range" min=".6" max="1.8" step=".05"><span id="teStickV" class="mono"></span></div>
+  <div class="row"><button class="btn ghost small" id="teAll" type="button">모든 버튼 이 크기로</button><button class="btn ghost small" id="teReset" type="button">처음 배치로</button><button class="btn small" id="teDone" type="button">완료</button></div>
+</div>
+
 <div id="title" class="screen" hidden>
   <div class="tcard">
     <div class="eyebrow">2편 · 얼음 아래의 왕</div>
@@ -349,6 +370,7 @@ h1 span { color: var(--lamp); }
       <label for="setVol">소리</label><input id="setVol" type="range" min="0" max="1" step=".05"><span id="setVolV" class="mono"></span>
       <label for="setQ">그래픽</label><select id="setQ" style="background:var(--panel);color:var(--fg);border:1px solid var(--line);padding:4px"><option value="high">높음 (그림자)</option><option value="low">낮음 (빠름)</option></select><span class="mono" style="font-size:11px">새로고침 후 적용</span>
     </div>
+    <div class="tc"><button class="btn ghost small" id="btnTouchEdit2" type="button">📱 버튼 위치·크기 바꾸기</button></div>
     <p class="lead pc" style="font-size:13px">조작: WASD 이동 · 마우스 조준 · 왼쪽 클릭 발사 · 오른쪽 클릭 정조준 · R 장전 · E 샘플/보고 · F 스캔 · Shift 달리기 · 1/2/3 무기</p>
   </div>
 </div>
@@ -385,6 +407,7 @@ h1 span { color: var(--lamp); }
       <label for="pVol">소리</label><input id="pVol" type="range" min="0" max="1" step=".05"><span id="pVolV" class="mono"></span>
     </div>
     <div class="row"><button class="btn" id="btnResume" type="button">계속하기</button><button class="btn ghost" id="btnQuit" type="button">캠프로 돌아가기</button></div>
+    <button class="btn ghost small tc" id="btnTouchEdit" type="button">📱 버튼 위치·크기 바꾸기</button>
     <p class="lead" style="font-size:13px">캠프로 돌아가도 번 돈과 조사 기록은 그대로 남아요.</p>
   </div>
 </div>
