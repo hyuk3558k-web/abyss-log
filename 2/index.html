@@ -303,6 +303,19 @@ h1 span { color: var(--lamp); }
 @media (max-width: 760px) { .shop, .journal { grid-template-columns: 1fr; } .detail { position: static; } .nbody { grid-template-columns: 1fr; } .obj { width: 56vw; } #minimap { width: 110px; height: 110px; } #money { top: calc(128px + env(safe-area-inset-top, 0px)); } #cashFeed { top: calc(148px + env(safe-area-inset-top, 0px)); } #ammoNum { font-size: 34px; } }
 
 #loading { display: grid; place-items: center; background: #000; font-family: var(--f-mono); color: var(--muted); letter-spacing: .2em; }
+/* ---------- 친구와 함께 (파티) ---------- */
+#coopHud { position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); font-size: 14px; font-weight: 700; color: #9ccaff; background: rgba(11,12,14,.6); border-bottom: 2px solid #6ab4ff; padding: 4px 12px; white-space: nowrap; }
+#party .mcard { gap: 14px; }
+.pfield { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; font-size: 14px; color: var(--muted); }
+.pfield input, .pjoin input { background: var(--panel2); color: var(--fg); border: 1px solid var(--line); padding: 9px 10px; font-size: 16px; font-family: var(--f-body); min-width: 0; -webkit-user-select: text; user-select: text; }
+.pjoin input { width: 9em; font-family: var(--f-mono); letter-spacing: .2em; font-size: 20px; }
+.pcode { font-family: var(--f-mono); font-weight: 700; font-size: 56px; letter-spacing: .25em; color: var(--lamp); text-align: center; line-height: 1; padding: 6px 0; }
+.pok { margin: 0; font-size: 17px; }
+.perr { margin: 0; color: #ff8a8d; font-size: 14px; line-height: 1.5; }
+.partybar { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; background: rgba(106,180,255,.1); border-left: 3px solid #6ab4ff; padding: 10px 12px; margin-bottom: 12px; font-size: 14px; }
+.partybar span { color: var(--muted); flex: 1 1 220px; }
+.partybar.warn { border-left-color: var(--danger); background: rgba(229,72,77,.1); }
+.partybar.warn span { color: var(--fg); }
 #err { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; background: var(--bg); z-index: 50; }
 .sign { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(4px + env(safe-area-inset-bottom, 0px)); font-size: 11.5px; color: rgba(239,233,223,.5); pointer-events: none; z-index: 30; white-space: nowrap; }
 </style>
@@ -311,6 +324,7 @@ h1 span { color: var(--lamp); }
 
 <div id="hud" hidden>
   <div class="obj"><div id="objTitle"></div><ul id="objList"></ul><div class="objbar"><div id="objBar"></div></div></div>
+  <div id="coopHud" hidden></div>
   <canvas id="minimap" width="150" height="150"></canvas>
   <div id="money"></div>
   <div id="cashFeed"></div>
@@ -363,6 +377,7 @@ h1 span { color: var(--lamp); }
     <div class="row" id="titleBtns">
       <button class="btn" id="btnContinue" type="button">이어하기</button>
       <button class="btn ghost" id="btnNew" type="button">처음부터</button>
+      <button class="btn ghost" id="btnParty2" type="button">👥 친구와 함께</button>
       <button class="btn ghost tc" id="btnTouchEdit2" type="button">📱 버튼 배치 바꾸기</button>
     </div>
     <div class="confirm" id="newConfirm" hidden>
@@ -390,6 +405,7 @@ h1 span { color: var(--lamp); }
   <div class="hubtop">
     <div class="brand">심연 탐사록 2 <span class="lbl" style="margin-left:6px">입구 캠프</span></div>
     <div class="wallet" id="wallet"></div>
+    <button class="btn ghost" id="btnParty" type="button" style="padding:6px 12px;font-size:13px">👥 파티</button>
     <button class="btn ghost" id="hubTitle" type="button" style="padding:6px 12px;font-size:13px">처음 화면</button>
     <nav class="tabs" id="tabs">
       <button class="tab" data-tab="expedition" type="button">탐사</button>
@@ -411,6 +427,7 @@ h1 span { color: var(--lamp); }
     </div>
     <div class="row"><button class="btn" id="btnResume" type="button">계속하기</button><button class="btn ghost" id="btnQuit" type="button">캠프로 돌아가기</button></div>
     <button class="btn ghost small tc" id="btnTouchEdit" type="button">📱 버튼 위치·크기 바꾸기</button>
+    <p class="lead" id="pauseCoop" style="font-size:13px;color:#9ccaff" hidden>👥 친구와 함께 할 때는 멈춤 화면에서도 게임이 계속 돌아가요. 조심!</p>
     <p class="lead" style="font-size:13px">캠프로 돌아가도 번 돈과 조사 기록은 그대로 남아요.</p>
   </div>
 </div>
@@ -448,6 +465,15 @@ h1 span { color: var(--lamp); }
   </article>
 </div>
 
+<div id="party" class="screen modal" hidden>
+  <div class="mcard">
+    <div class="eyebrow">친구와 함께</div>
+    <h2>파티</h2>
+    <div id="partyBody" style="display:grid;gap:14px"></div>
+    <div class="row"><button class="btn ghost" id="btnPartyClose" type="button">닫기</button></div>
+  </div>
+</div>
+
 <div id="loading" class="screen" hidden>탐사 지역으로 가는 중…</div>
 <div id="err" hidden><p>3D 엔진을 불러오지 못했어요. 인터넷 연결을 확인하고 새로고침해 주세요.</p></div>
 <div class="sign">서주원이 만듬</div>
@@ -462,5 +488,6 @@ h1 span { color: var(--lamp); }
 <script src="world.js"></script>
 <script src="creatures.js"></script>
 <script src="mission.js"></script>
+<script src="net.js"></script>
 <script src="game.js"></script>
 <script src="ui.js"></script>

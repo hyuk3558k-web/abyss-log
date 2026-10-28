@@ -364,10 +364,13 @@ const GAME = (() => {
             end = h.point; break;
           }
         }
-        if (i < 3 || st.pellets === 1) tracer(from, end || camera.position.clone().addScaledVector(dir, 80));
+        if (i < 3 || st.pellets === 1) { const to = end || camera.position.clone().addScaledVector(dir, 80); tracer(from, to); if (i < 3) shotEnds.push(v3a(to)); }
       }
       for (const [c, k] of per) damageCreature(c, k.dmg, k.weak, k.point);
     }
+    // 친구 화면에도 총알 줄과 총소리가 나오게
+    if (coopOn()) NET.send({ t: 'shot', f: v3a(from), e: shotEnds.splice(0), g: g.id });
+    shotEnds.length = 0;
     // 반동 · 불꽃 · 소리
     // 총마다 정해진 무늬로 튄다. 계속 쏘면 점점 세지고, 마우스로 직접 눌러 잡아야 한다
     const R = st.rp;
@@ -389,18 +392,23 @@ const GAME = (() => {
   }
   function bloodOf(sp) { return { tick: 0xc06a2a, bat: 0x8a3aa0, spider: 0xb070ff, stalker: 0x30d0b0, golem: 0xff7a20, queen: 0xff3a8a, howler: 0xa02a20, brood: 0x9aff40, warden: 0x60d0ff }[sp] || (SPECIES[sp] && SPECIES[sp].blood) || 0xaa3030; }
 
-  function damageCreature(c, dmg, weak, point) {
+  // byFriend: 친구가 쏜 것 (방장 컴퓨터에서만). from: 쏜 사람 자리
+  function damageCreature(c, dmg, weak, point, from, byFriend) {
     if (c.state === 'dead') return;
+    c.lastBy = byFriend ? 'g' : 'h';
     const killed = CREATURES.damage(c, dmg, weak, point);
+    // 친구 컴퓨터: 피해는 방장에게 보냈고, 여기선 맞은 표시만
+    if (RUN.netGuest) { showHit(weak, false); AU.fx(weak ? 'hitWeak' : 'hitFlesh', undefined, undefined, .6); popAt(point, String(Math.round(dmg)), weak ? 'weak' : ''); return; }
     // 맞으면 뒤로 밀리고 움찔한다 (보스는 안 밀림)
     if (!killed && c.S.kind !== 'boss') {
-      const d = point.clone().sub(camera.position).setY(0), L = d.length();
+      const d = point.clone().sub(from || camera.position).setY(0), L = d.length();
       if (L > .01) {
         const f = clamp(dmg / c.max, .05, .6) * (c.alpha ? .3 : 1);
         c.knock = (c.knock || new V3()).addScaledVector(d.divideScalar(L), f * 7);
         c.flinch = Math.min(1, (c.flinch || 0) + f * 3 + .2);
       }
     }
+    if (byFriend) { burst(point, bloodOf(c.sp), weak ? 11 : 6, weak ? 5 : 4, .45, 1, weak ? 1.3 : 1); return; }
     if (killed && weak) RUN.slowT = Math.max(RUN.slowT || 0, .07);
     showHit(weak, killed);
     AU.fx(weak ? 'hitWeak' : 'hitFlesh', undefined, undefined, .6);
@@ -504,13 +512,20 @@ const GAME = (() => {
   //  플레이어
   // ---------------------------------------------------------------
   function hurtPlayer(dmg, from) {
-    if (state !== 'playing' || P.dead) return;
+    if ((state !== 'playing' && !coopOn()) || P.dead) return; // 친구와 할 때는 멈춰도 세상이 계속 돌아간다
     P.hp -= dmg; P.hurtT = 0; RUN.hurt = 1; shake(Math.min(.5, dmg * .02));
     RUN.dmgFrom = from.clone(); RUN.dmgT = 1.2; AU.fx('hurt');
     if (P.hp <= 0) { P.hp = 0; die(); }
   }
   function die() {
     P.dead = true; RUN.deadT = 0;
+    if (coopOn()) {
+      // 친구가 살아 있으면 10초 뒤 친구 옆에서 다시 일어난다. 둘 다 쓰러지면 방장이 '탐사 중단'을 알린다
+      save(); NET.send({ t: 'down' });
+      if (R.here && !R.dead) cine.banner('쓰러졌어요!', `10초 뒤 ${NET.st.friend} 옆에서 다시 일어나요`, 4);
+      else if (NET.isHost) wipe();
+      return;
+    }
     if (document.pointerLockElement) document.exitPointerLock();
     save();
     setTimeout(() => { if (RUN && P.dead) UI.showDeath(runSummary()); }, 1800);
@@ -521,6 +536,7 @@ const GAME = (() => {
     let f = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0);
     let r = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0);
     if (touch.stickId !== null) { f = -touch.my; r = touch.mx; }
+    if (state !== 'playing') f = r = 0; // 친구와 할 때 멈춤 화면에서도 세상은 돌아가지만 나는 가만히
     const sy = Math.sin(P.yaw), cy = Math.cos(P.yaw);
     const wish = new V3(-sy * f + cy * r, 0, -cy * f - sy * r); if (wish.length() > 1) wish.normalize();
     const W = curW();
@@ -573,8 +589,10 @@ const GAME = (() => {
   // ---------------------------------------------------------------
   //  조사 · 샘플 · 보고
   // ---------------------------------------------------------------
-  function research(sp, amount, why) {
+  // share: 샘플·스캔으로 얻은 조사는 친구에게도 나눠 준다
+  function research(sp, amount, why, share) {
     if (!RUN || RUN.mode === 'range') return;
+    if (share && coopOn()) NET.send({ t: 'res', sp, a: amount, why });
     const before = SAVE.research[sp] || 0; if (before >= 100) return;
     const now = Math.min(100, before + amount); SAVE.research[sp] = now;
     toast(`${SPECIES[sp].n} 조사 +${Math.round(now - before)}% (${why})`);
@@ -589,6 +607,8 @@ const GAME = (() => {
   }
   function onKill(c, weak) {
     if (!RUN) return;
+    // 방장이 잡은 것도 친구가 잡은 것도 둘 다 돈과 조사를 받는다
+    if (hostCoop()) NET.send({ t: 'kill', id: c.id, w: weak ? 1 : 0, by: c.lastBy === 'g' ? 1 : 0, sp: c.sp, p: v3a(c.pos) });
     RUN.kills++; SAVE.kills++;
     addMoney(c.S.money * .5 * (weak ? 1.25 : 1) * (RUN.mode === 'hunt' ? 1.15 : 1));
     research(c.sp, c.S.kill, '처치');
@@ -612,7 +632,8 @@ const GAME = (() => {
 
   // 대화 (무전)
   const subs = [];
-  function say(line) { if (line && subs.length < 6) subs.push(line); }
+  function sayLocal(line) { if (line && subs.length < 6) subs.push(line); }
+  function say(line) { sayLocal(line); if (line && hostCoop()) NET.send({ t: 'say', l: line }); }
   const busy = () => subs.length > 0 || (RUN && RUN.subT > 0);
   let talking = false;
   function updateSubs(dt) {
@@ -651,7 +672,7 @@ const GAME = (() => {
       if (corpse) { prompt = `[E] 길게 눌러 ${corpse.S.n} 샘플 채집`; holdKey = 'e'; need = 1; action = () => sample(corpse); }
       else if (RUN.mode !== 'range') {
         const c = aimedCreature(32);
-        if (c && !c.scanned && (SAVE.research[c.sp] || 0) < 100 && c.S.scan) { prompt = `[F] 길게 눌러 ${c.S.n} 조사 스캔`; holdKey = 'f'; need = 1.2; action = () => { c.scanned = true; research(c.sp, c.S.scan, '스캔'); AU.fx('scanDone'); MISSIONRT.onScan(); }; RUN.scanTarget = c; }
+        if (c && !c.scanned && (SAVE.research[c.sp] || 0) < 100 && c.S.scan) { prompt = `[F] 길게 눌러 ${c.S.n} 조사 스캔`; holdKey = 'f'; need = 1.2; action = () => { c.scanned = true; research(c.sp, c.S.scan, '스캔', true); AU.fx('scanDone'); MISSIONRT.onScan(); }; RUN.scanTarget = c; }
       }
     }
     $('prompt').textContent = prompt; $('prompt').hidden = !prompt;
@@ -673,11 +694,14 @@ const GAME = (() => {
     c.sampled = true; RUN.samples++;
     AU.fx('sample'); burst(c.pos.clone().setY(.6), 0x5fe0c8, 16, 3, .6);
     addMoney(25 + c.S.money * .2);
-    research(c.sp, c.S.sample, '샘플');
+    research(c.sp, c.S.sample, '샘플', true);
     MISSIONRT.onSample(); save();
   }
   function finish(kind) {
     if (state !== 'playing') return;
+    // 친구는 무전기에서 방장에게 "보고해요"를 보내고, 방장이 끝내면 둘 다 끝난다
+    if (RUN.netGuest && !RUN.netEnd && kind !== 'range') { NET.send({ t: 'finish', k: kind }); toast('방장에게 알렸어요…'); return; }
+    if (hostCoop() && kind !== 'range') NET.send({ t: 'end', k: kind });
     if (kind === 'report') {
       const id = RUN.ch.id;
       const first = !SAVE.done.includes(id);
@@ -733,7 +757,8 @@ const GAME = (() => {
     makeLights();
     const mm = MISSION[chIdx];
     const ch = mode === 'range' ? { n: '사격장' } : Object.assign({}, mm, { theme: missionTheme(mm), target: mm.sp, half: mm.half || '여왕이 약해지고 있어요! 세 개의 눈을 노려요!' });
-    const seed = mode === 'story' ? ch.seed : (Math.random() * 1e9) | 0;
+    const NG = opts.net; // 친구 컴퓨터: 방장이 보내 준 맵 정보
+    const seed = NG ? NG.seed : mode === 'story' ? ch.seed : (Math.random() * 1e9) | 0;
     LV = WORLD.build(ch, seed, mode, { shadows: SAVE.quality === 'high' });
     scene.add(LV.group);
     const T = LV.theme;
@@ -741,26 +766,44 @@ const GAME = (() => {
     gunHemi.color.set(T.amb).lerp(new THREE.Color(0xd0c8bc), .6);
     // 플레이어
     P.pos.copy(LV.start); P.pos.y = 0; P.vel.set(0, 0, 0); P.yaw = -PI / 2; P.pitch = 0; P.hp = 100; P.dead = false; P.hurtT = 9; P.bob = 0;
+    if (NG) { const q = LV.start.clone().add(new V3(0, 0, 1.4)); if (!LV.isWallAt(q.x, q.z)) P.pos.copy(q).setY(0); }
     camera.rotation.z = 0;
-    RUN = { ch, chIdx, mode, money: 0, kills: 0, samples: 0, time: 0, ready: false, aim: 0, kick: 0, recoilPitch: 0, sway: new THREE.Vector2(), shake: 0, hurt: 0, dmgT: 0, flashT: 0, flashSize: 1, subT: 0, holdT: 0, sprint: false, sprintK: 0, spawnT: 15, mapT: 0, saidSeen: false };
+    RUN = { ch, chIdx, mode, seed, netGuest: !!NG, coop: false, money: 0, kills: 0, samples: 0, time: 0, ready: false, aim: 0, kick: 0, recoilPitch: 0, sway: new THREE.Vector2(), shake: 0, hurt: 0, dmgT: 0, flashT: 0, flashSize: 1, subT: 0, holdT: 0, sprint: false, sprintK: 0, spawnT: 15, mapT: 0, saidSeen: false };
     subs.length = 0;
+    R.here = false; R.net = null; R.dead = false;
     // 무기
     gunScene.children.filter(o => o.type === 'Group').forEach(o => gunScene.remove(o));
     GUNVIEW.clearDebris(gunScene);
     const ids = mode === 'range' && opts.test ? [opts.test].concat(SAVE.loadout.filter(x => x && x !== opts.test)).slice(0, 3) : SAVE.loadout.filter(Boolean);
     slots = ids.map(makeSlot); cur = -1; equip(0); slots[0].swapT = .5;
     // 괴물
-    CREATURES.init(LV, scene, { hurt: hurtPlayer, kill: onKill, seen: onSeen, burst: (p, c, n, s) => burst(p, c, n, s, .6), shake, phase: () => say(RUN.ch.half) });
+    // 괴물 (친구와 할 때 방장은 괴물 소리·튀는 흙을 친구에게도 보내고, 친구는 맞힌 것을 방장에게 보낸다)
+    CREATURES.init(LV, scene, {
+      hurt: (d, from, T) => { if (T === R) NET.send({ t: 'hurt', d: Math.round(d * 10) / 10, x: r2(from.x), z: r2(from.z) }); else hurtPlayer(d, from); },
+      kill: onKill, seen: onSeen, shake, phase: () => say(RUN.ch.half),
+      burst: (p, c, n, s) => { burst(p, c, n, s, .6); if (hostCoop() && R.here) NET.send({ t: 'b', a: [r2(p.x), r2(p.y), r2(p.z), c, n, s] }); },
+      voice: (sp, k, x, z) => { if (hostCoop() && R.here) NET.send({ t: 'v', a: [sp, k, r2(x), r2(z)] }); },
+      sfx: (nm, x, z) => { if (hostCoop() && R.here) NET.send({ t: 'sfx', a: [nm, r2(x), r2(z)] }); },
+      remote: NG ? (c, d, w, p) => { if (d > 0) NET.send({ t: 'dmg', id: c.id, d: Math.round(d * 10) / 10, w: w ? 1 : 0, p: v3a(p) }); } : null,
+    });
     if (mode === 'range') RUN.targets = buildTargets();
     else {
       const n = Math.round(ch.count * (mode === 'hunt' ? 1.3 : 1));
-      for (let i = 0; i < n; i++) spawnOne(20, true);
-      if (ch.boss && (mode === 'hunt' || !(SAVE.research[ch.boss] >= 100))) {
+      if (!NG) for (let i = 0; i < n; i++) spawnOne(20, true);
+      if (!NG && ch.boss && (mode === 'hunt' || !(SAVE.research[ch.boss] >= 100))) {
         const d = LV.deep; const b = CREATURES.spawn(ch.boss, LV.cellC(d.x, d.z), { instant: true }); void b;
       }
-      MISSIONRT.start(mode === 'story' ? mm : Object.assign({}, mm, { type: 'free' }), { LV, scene, P, RUN, SAVE, say, busy, toast, addMoney, save });
-      if (mode === 'story') ch.intro.forEach(say);
-      else say(['윤 박사', '자유 사냥이에요. 원할 때 무전기(E)로 돌아오면 돼요.']);
+      const L = NG && NG.lay || {};
+      MISSIONRT.start(mode === 'story' ? mm : Object.assign({}, mm, { type: 'free' }), {
+        LV, scene, P, RUN, SAVE, say, sayLocal, busy, addMoney, save,
+        toast: t => { toast(t); if (hostCoop()) NET.send({ t: 'toast', x: t }); },
+        puppet: !!NG, objs: L.objs, alpha: L.alpha, others,
+        ask: (k, i) => NET.send({ t: 'act', k, i }),
+        friendMoney: n => NET.send({ t: 'money', n }),
+      });
+      if (NG) (NG.intro || []).forEach(sayLocal);
+      else if (mode === 'story') ch.intro.forEach(sayLocal);
+      else sayLocal(['윤 박사', '자유 사냥이에요. 원할 때 무전기(E)로 돌아오면 돼요.']);
       MISSIONRT.onEquip(slots[0].g);
     }
     AU.ambient(T);
@@ -773,6 +816,10 @@ const GAME = (() => {
     const R0 = mm && REGIONS[mm.r];
     if (mode === 'story') cine.show(`임무 ${MISSIONS.indexOf(mm) + 1} · ${R0 ? R0.n : ''}`, ch.n, R0 ? `${R0.depth} · ${mm.desc || R0.desc}` : '', 4.2);
     else if (mode === 'hunt') cine.show('자유 사냥', R0 ? R0.n : ch.n, '괴물을 잡아 돈을 벌어요', 3);
+    // 친구와 함께: 방장은 친구도 같은 맵으로 부른다
+    if (NG) RUN.coop = true;
+    else if (NET.isHost && mode !== 'range') { RUN.coop = true; sendStart(true); }
+    lobby();
     lock();
   }
   function spawnOne(minD, initial) {
@@ -782,11 +829,15 @@ const GAME = (() => {
     const p = LV.randomFloor(minD, initial ? LV.start : P.pos);
     if (!p) return;
     if (!initial && LV.los(p.x, p.z, P.pos.x, P.pos.z)) return;
+    if (!initial && R.here && (Math.hypot(p.x - R.pos.x, p.z - R.pos.z) < minD * .6 || LV.los(p.x, p.z, R.pos.x, R.pos.z))) return; // 친구 눈앞에서도 안 생긴다
     const c = CREATURES.spawn(sp, p, { instant: initial });
     if (!initial) { c.state = 'hunt'; }
   }
   function endLevel(silent) {
     MISSIONRT.end();
+    removeAvatar(); R.here = false; R.net = null;
+    if (RUN) RUN.coop = false;
+    if (!silent) lobby();
     AU.stopAmbient(); AU.spin(0);
     if (LV) { scene.remove(LV.group); LV.group.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
     CREATURES.clear();
@@ -820,6 +871,11 @@ const GAME = (() => {
   const setT = (id, v) => { if (last[id] !== v) { last[id] = v; $(id).textContent = v; } };
   function updateHud(dt) {
     const W = curW();
+    const ch = $('coopHud');
+    if (ch) {
+      ch.hidden = !coopOn();
+      if (coopOn()) setT('coopHud', R.here ? `👥 ${NET.st.friend} · ${R.dead ? '쓰러짐!' : '♥ ' + Math.max(0, Math.ceil(R.hp))}` : `👥 ${NET.st.friend} 기다리는 중…`);
+    }
     setT('hpNum', String(Math.ceil(P.hp)));
     $('hpFill').style.width = P.hp + '%'; $('hpFill').classList.toggle('low', P.hp < 30);
     if (W) {
@@ -891,6 +947,7 @@ const GAME = (() => {
     CREATURES.list.forEach(c => { if (c.state === 'dead' && !c.sampled && c.S.sample) g.fillRect(c.pos.x / CS * sc - 2, c.pos.z / CS * sc - 2, 4, 4); });
     g.fillStyle = '#ffb347'; g.beginPath(); g.arc(LV.radio.x / CS * sc, LV.radio.z / CS * sc, 4, 0, PI * 2); g.fill();
     if (RUN.mode !== 'range') MISSIONRT.mapPoints().forEach(o => { g.fillStyle = o.c; g.beginPath(); g.arc(o.x / CS * sc, o.z / CS * sc, o.s || 4, 0, PI * 2); g.fill(); });
+    if (R.here) { g.fillStyle = R.dead ? '#e5484d' : '#6ab4ff'; g.beginPath(); g.arc(R.pos.x / CS * sc, R.pos.z / CS * sc, 4.5, 0, PI * 2); g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 1.2; g.stroke(); }
     g.restore();
     g.fillStyle = '#f3ece0'; g.beginPath(); g.moveTo(S / 2, S / 2 - 7); g.lineTo(S / 2 - 5, S / 2 + 5); g.lineTo(S / 2 + 5, S / 2 + 5); g.fill();
   }
@@ -914,7 +971,10 @@ const GAME = (() => {
     AU.spin(0); UI.showPause();
   }
   function resume() { AU.init(); state = 'playing'; UI.hideAll(); showHud(true); lock(); }
-  function quitToCamp() { save(); endLevel(); UI.showHub('expedition'); }
+  function quitToCamp() {
+    if (RUN && RUN.coop && NET.on) NET.send(NET.isHost ? { t: 'end', k: 'quit' } : { t: 'left' });
+    save(); endLevel(); UI.showHub('expedition');
+  }
 
   addEventListener('keydown', e => {
     if (state !== 'playing') return;
@@ -1073,12 +1133,181 @@ const GAME = (() => {
   // ---------------------------------------------------------------
   //  메인 반복
   // ---------------------------------------------------------------
+  // ---------------------------------------------------------------
+  //  친구와 함께 (파티)
+  //  방장 컴퓨터가 괴물과 임무를 움직이고, 1초에 12번 친구에게 상태를 보낸다.
+  //  친구 컴퓨터는 그걸 받아 보여 주고, 자기가 쏜 것 · 한 일만 방장에게 보낸다.
+  // ---------------------------------------------------------------
+  // R = 친구. 방장 컴퓨터에서는 괴물이 노릴 수 있는 두 번째 사람이 된다
+  const R = { pos: new V3(), vel: new V3(), yaw: 0, pitch: 0, dead: false, hp: 100, here: false, gun: '', net: null, av: null, sendT: 0, lobby: null };
+  const r2 = v => Math.round(v * 100) / 100;
+  const v3a = v => [r2(v.x), r2(v.y), r2(v.z)];
+  const shotEnds = [];
+  function coopOn() { return !!(RUN && RUN.coop && NET.on); }
+  function hostCoop() { return coopOn() && NET.isHost; }
+  function others() { return R.here ? [R] : []; }
+
+  function sendStart(fresh) {
+    NET.send({ t: 'start', ch: RUN.chIdx, mode: RUN.mode, seed: RUN.seed, lay: MISSIONRT.layout(), intro: fresh && RUN.mode === 'story' ? RUN.ch.intro : null });
+  }
+  // 방장이 지금 임무 중인지 친구에게 알려 준다 (친구 캠프 화면의 "합류하기" 버튼)
+  function lobby() {
+    if (!NET.isHost) return;
+    const on = !!(RUN && RUN.coop && LV && state !== 'menu');
+    NET.send({ t: 'lobby', on, n: on ? (RUN.mode === 'hunt' ? '자유 사냥' : RUN.ch.n) : '' });
+  }
+
+  // ----- 친구 모습 -----
+  function makeAvatar() {
+    const h = MISSIONRT.human({ coat: 0x35506e, pants: 0x2a2c33, hair: 0x2a1a10, vest: 0x5a6a3a, lamp: 1, pack: 1 });
+    const gun = new THREE.Mesh(new THREE.BoxGeometry(.07, .55, .1), new THREE.MeshStandardMaterial({ color: 0x2a2a2a, metalness: .5, roughness: .5 }));
+    gun.position.set(0, -.62, .05); h.arms[1].add(gun);
+    // 머리 위 이름표 (벽 너머로도 보인다)
+    const cv = document.createElement('canvas'); cv.width = 256; cv.height = 64; const g = cv.getContext('2d');
+    g.font = 'bold 30px "Noto Sans KR", "Malgun Gothic", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    const name = NET.st.friend || '친구', w = Math.min(250, g.measureText(name).width + 34);
+    g.fillStyle = 'rgba(10,14,20,.7)'; g.fillRect(128 - w / 2, 8, w, 48);
+    g.fillStyle = '#6ab4ff'; g.fillRect(128 - w / 2, 8, 5, 48);
+    g.fillStyle = '#efe9df'; g.fillText(name, 130, 33);
+    const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false, depthWrite: false, transparent: true }));
+    tag.scale.set(1.3, .325, 1); tag.position.y = 2.15; tag.renderOrder = 9; h.g.add(tag);
+    h.g.position.copy(R.pos); scene.add(h.g);
+    R.av = h; R.flash = new THREE.PointLight(0xffb060, 0, 6, 2); h.g.add(R.flash); R.flash.position.set(0, 1.4, .8);
+  }
+  function removeAvatar() { if (R.av) { scene.remove(R.av.g); R.av = null; } }
+  function setRemote(p) {
+    R.net = p; R.dead = !!p[5]; R.hp = p[6]; R.gun = p[7];
+  }
+  function updateAvatar(dt) {
+    if (!R.here || !R.net || !LV) { if (R.av) R.av.g.visible = false; return; }
+    if (!R.av) { makeAvatar(); R.pos.set(R.net[0], R.net[1], R.net[2]); R.yaw = R.net[3]; }
+    const n = R.net, h = R.av; h.g.visible = true;
+    const ox = R.pos.x, oz = R.pos.z, far = Math.hypot(n[0] - ox, n[2] - oz) > 5, k = far ? 1 : Math.min(1, dt * 12);
+    R.pos.x += (n[0] - R.pos.x) * k; R.pos.y += (n[1] - R.pos.y) * k; R.pos.z += (n[2] - R.pos.z) * k;
+    if (dt > 0) { R.vel.x += ((R.pos.x - ox) / dt - R.vel.x) * .25; R.vel.z += ((R.pos.z - oz) / dt - R.vel.z) * .25; }
+    let dy = n[3] - R.yaw; while (dy > PI) dy -= PI * 2; while (dy < -PI) dy += PI * 2; R.yaw += dy * Math.min(1, dt * 14);
+    R.pitch += (n[4] - R.pitch) * Math.min(1, dt * 14);
+    // 모델은 +z를 보고, 플레이어는 -z를 본다
+    h.g.position.copy(R.pos); h.g.rotation.set(0, R.yaw + PI, 0);
+    MISSIONRT.animHuman(h, Math.hypot(R.vel.x, R.vel.z), dt, false);
+    h.arms[1].rotation.x = -1.45 - R.pitch * .8; h.arms[0].rotation.x = -1.2 - R.pitch * .8; h.arms[0].rotation.z = -.35;
+    h.head.rotation.x = -R.pitch * .6;
+    if (R.dead) { h.g.rotation.x = -PI / 2; h.g.position.y = .2; }
+    if (R.flash) R.flash.intensity = Math.max(0, R.flash.intensity - dt * 40);
+  }
+
+  // ----- 쓰러짐 · 다시 일어나기 -----
+  function revive() {
+    let p = null;
+    for (let k = 0; k < 12 && !p; k++) { const a = Math.random() * PI * 2, x = R.pos.x + Math.cos(a) * 1.6, z = R.pos.z + Math.sin(a) * 1.6; if (!LV.isWallAt(x, z)) p = new V3(x, 0, z); }
+    P.pos.copy(p || R.pos).setY(0); P.vel.set(0, 0, 0);
+    P.dead = false; P.hp = 60; P.hurtT = 0; RUN.deadT = 0; camera.rotation.z = 0;
+    cine.banner('다시 일어났어요', `${NET.st.friend} 옆으로 왔어요. 체력 60`, 2.5); AU.fx('scanDone');
+  }
+  function wipe() {
+    if (RUN.wiped) return;
+    RUN.wiped = true;
+    if (hostCoop()) NET.send({ t: 'end', k: 'wipe' });
+    if (document.pointerLockElement) document.exitPointerLock();
+    setTimeout(() => { if (RUN && RUN.wiped && LV) UI.showDeath(runSummary()); }, 1800);
+  }
+
+  // ----- 매 프레임 -----
+  function coopTick(dt) {
+    if (!coopOn()) return;
+    R.sendT -= dt;
+    if (R.sendT <= 0) {
+      R.sendT = NET.isHost ? 1 / 12 : 1 / 15;
+      const W = curW();
+      const me = [r2(P.pos.x), r2(P.pos.y), r2(P.pos.z), r2(P.yaw), r2(P.pitch), P.dead ? 1 : 0, Math.round(P.hp), W ? W.g.id : ''];
+      if (NET.isHost) NET.send({ t: 'w', p: me, c: CREATURES.snap(), m: MISSIONRT.snap() });
+      else NET.send({ t: 'p', p: me });
+    }
+    updateAvatar(dt);
+    if (P.dead && !RUN.wiped) {
+      if (R.here && !R.dead) { if (RUN.deadT > 10) revive(); }
+      else if (NET.isHost) wipe();
+    }
+  }
+
+  // ----- 친구 총소리 · 총알 줄 -----
+  const remoteSt = {};
+  function remoteShot(d) {
+    if (!coopOn() || !LV || !GUN[d.g]) return;
+    const from = new V3(d.f[0], d.f[1], d.f[2]);
+    d.e.forEach(e => tracer(from, new V3(e[0], e[1], e[2])));
+    const st = remoteSt[d.g] || (remoteSt[d.g] = gunStats(GUN[d.g], defaultMods(GUN[d.g])));
+    smoke(from, .12, .7);
+    if (R.flash && !st.sup) R.flash.intensity = 2;
+    const dx = from.x - P.pos.x, dz = from.z - P.pos.z, dist = Math.hypot(dx, dz);
+    const right = dx * Math.cos(P.yaw) - dz * Math.sin(P.yaw);
+    AU.shot(st, GUN[d.g].cal, clamp(1 - dist / 90, .12, 1) * .7, dist > .5 ? clamp(right / dist, -1, 1) * .8 : 0);
+    if (NET.isHost) CREATURES.noise(R.pos, st.noise || 30);
+  }
+
+  // ----- 받은 소식 -----
+  function onNet(d) {
+    const inHost = NET.isHost && RUN && RUN.coop && LV, inGuest = RUN && RUN.netGuest && RUN.coop && LV;
+    switch (d.t) {
+      case 'lobby': R.lobby = d.on ? d : null; if (typeof UI !== 'undefined') UI.partyChanged(); break;
+      case 'start': if (NET.isGuest) { if (typeof UI !== 'undefined') UI.hideAll(); startLevel(d.ch, d.mode, { net: d }); } break;
+      case 'join': if (inHost) sendStart(false); break;
+      case 'w': if (inGuest) { if (!R.here) { R.here = true; } setRemote(d.p); CREATURES.applySnap(d.c); MISSIONRT.applySnap(d.m); } break;
+      case 'p': if (inHost) { if (!R.here) { R.here = true; toast(`${NET.st.friend} 합류!`); } setRemote(d.p); } break;
+      case 'shot': remoteShot(d); break;
+      case 'dmg': if (inHost) { const c = CREATURES.byId(d.id); if (c) damageCreature(c, d.d, !!d.w, new V3(d.p[0], d.p[1], d.p[2]), R.pos, true); } break;
+      case 'kill': if (inGuest) {
+        let c = CREATURES.byId(d.id);
+        if (c && c.state !== 'dead') CREATURES.markDead(c, true);
+        if (!c && SPECIES[d.sp]) c = { id: d.id, sp: d.sp, S: SPECIES[d.sp], pos: new V3(d.p[0], d.p[1], d.p[2]), alpha: false };
+        if (c) { onKill(c, !!d.w); if (d.by) showHit(!!d.w, true); }
+        break;
+      }
+      case 'hurt': if (inGuest) hurtPlayer(d.d, new V3(d.x, 0, d.z)); break;
+      case 'say': if (inGuest) sayLocal(d.l); break;
+      case 'toast': if (inGuest) toast(d.x); break;
+      case 'res': if (coopOn()) research(d.sp, d.a, '친구 ' + d.why); break;
+      case 'money': if (coopOn()) addMoney(d.n); break;
+      case 'v': if (inGuest) AU.voice(d.a[0], d.a[1], d.a[2], d.a[3]); break;
+      case 'sfx': if (inGuest) AU.fx(d.a[0], d.a[1], d.a[2]); break;
+      case 'b': if (inGuest) burst(new V3(d.a[0], d.a[1], d.a[2]), d.a[3], d.a[4], d.a[5], .6); break;
+      case 'act': if (inHost) MISSIONRT.doAct(d.k, d.i, true); break;
+      case 'finish': if (inHost && state === 'playing') finish(d.k); break;
+      case 'down': if (coopOn()) toast(`${NET.st.friend}이(가) 쓰러졌어요! 10초 뒤 다시 일어나요`); break;
+      case 'left': if (inHost) { R.here = false; removeAvatar(); toast(`${NET.st.friend}이(가) 캠프로 돌아갔어요`); } break;
+      case 'end': if (inGuest) {
+        if (d.k === 'report' || d.k === 'hunt') { RUN.netEnd = true; if (state === 'paused') state = 'playing'; finish(d.k); }
+        else if (d.k === 'wipe') wipe();
+        else if (d.k === 'quit') { save(); endLevel(); UI.showHub('expedition'); UI.partyNote('방장이 캠프로 돌아갔어요.'); }
+        break;
+      }
+    }
+  }
+  NET.bind({
+    data: onNet,
+    link(role) {
+      if (typeof UI !== 'undefined') UI.partyChanged();
+      // 방장이 이미 임무 중이면 친구를 바로 부른다
+      if (role === 'host' && RUN && LV && state !== 'menu' && RUN.mode !== 'range') { RUN.coop = true; sendStart(false); toast(`${NET.st.friend}이(가) 파티에 들어왔어요!`); }
+      lobby();
+    },
+    unlink(role, msg) {
+      R.here = false; R.net = null; R.lobby = null; removeAvatar();
+      if (RUN) RUN.coop = false;
+      // 친구 컴퓨터는 방장 없이 괴물이 움직이지 않으니 캠프로 돌아간다
+      if (role === 'guest' && RUN && RUN.netGuest && LV) { endLevel(); UI.showHub('expedition'); }
+      else if (msg && LV && state !== 'menu') toast(msg);
+      if (typeof UI !== 'undefined') { UI.partyChanged(); if (msg) UI.partyNote(msg); }
+    },
+  });
+  function joinHost() { NET.send({ t: 'join' }); }
+
   const clock = new THREE.Clock();
   let menuScene = null;
   function frame() {
     requestAnimationFrame(frame);
     const dt = Math.min(.05, clock.getDelta());
-    if (state === 'playing' && LV) step(dt);
+    if ((state === 'playing' || (state === 'paused' && coopOn())) && LV) step(dt);
     else if (state === 'menu') { if (typeof UI !== 'undefined' && UI.menuRender) UI.menuRender(dt); return; }
     renderer.clear();
     if (LV) renderer.render(scene, camera);
@@ -1093,14 +1322,16 @@ const GAME = (() => {
       RUN.time += dt;
       updatePlayer(dt);
       updateWeapon(dt);
-      CREATURES.update(dt, P);
+      if (RUN.netGuest) CREATURES.updatePuppets(dt); else CREATURES.update(dt, P, others());
       updateFx(dt);
       if (RUN.mode === 'range') updateTargets(dt);
       else {
         RUN.spawnT -= dt;
-        if (RUN.spawnT <= 0) { RUN.spawnT = RUN.mode === 'hunt' || RUN.ch.type === 'hunt' ? 9 : 20; if (CREATURES.alive() < RUN.ch.count * .7) spawnOne(26, false); }
+        // 친구와 함께면 괴물이 조금 더 많다
+        if (RUN.spawnT <= 0 && !RUN.netGuest) { RUN.spawnT = RUN.mode === 'hunt' || RUN.ch.type === 'hunt' ? 9 : 20; if (CREATURES.alive() < RUN.ch.count * (R.here ? 1 : .7)) spawnOne(26, false); }
         MISSIONRT.update(dt, talking);
       }
+      coopTick(dt);
       updateCamera(dt);
       updateView(dt);
       updateInteract(dt);
@@ -1117,10 +1348,11 @@ const GAME = (() => {
   void menuScene;
 
   return {
-    SAVE, save, load, resetSave, modsOf, renderer, startLevel, resume, pause, quitToCamp, isTouch, editTouch,
+    SAVE, save, load, resetSave, modsOf, renderer, startLevel, resume, pause, quitToCamp, isTouch, editTouch, joinHost,
+    get lobby() { return R.lobby; },
     get state() { return state; }, set state(v) { state = v; },
     setSens(v) { SAVE.sens = v; save(); }, setVol(v) { SAVE.vol = v; AU.setVolume(v); save(); },
     // 시험용: 화면을 그리지 않고 게임 시간을 앞으로 돌린다
-    _dbg: { input, P, get slots() { return slots; }, get cur() { return cur; }, step: dt => { if (state === 'playing' && LV) { scene.updateMatrixWorld(); gunScene.updateMatrixWorld(); step(dt); } }, equip, startReload, get LV() { return LV; }, get RUN() { return RUN; } },
+    _dbg: { input, P, get slots() { return slots; }, get cur() { return cur; }, step: dt => { if (state === 'playing' && LV) { scene.updateMatrixWorld(); gunScene.updateMatrixWorld(); step(dt); } }, equip, startReload, finish, R, get LV() { return LV; }, get RUN() { return RUN; } },
   };
 })();

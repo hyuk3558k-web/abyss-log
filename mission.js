@@ -167,18 +167,21 @@ const MISSIONRT = (() => {
   function ready(k, sec) { const now = S.time; if (cd[k] !== undefined && now - cd[k] < sec) return false; cd[k] = now; return true; }
 
   // ---------- 시작 ----------
+  // 친구 컴퓨터(puppet)에서는 임무를 직접 진행하지 않고, 방장이 보내 준 상태를 보여 주기만 한다
+  let puppet = false;
   function start(mission, ctx) {
     X = ctx; m = mission; LV = ctx.LV; scene = ctx.scene; P = ctx.P;
+    puppet = !!ctx.puppet;
     objs = []; surv = null; alphaC = null;
     Object.keys(S).forEach(k => delete S[k]); Object.keys(cd).forEach(k => delete cd[k]);
     Object.assign(S, { time: 0, prog: 0, ready: false, idleT: rand(25, 40), regionSaid: 0, combo: [], kills: 0, seen: {}, waveT: 8, timer: 0, started: false, away: 0, half: false, said50: false, hints: {}, guns: {}, money: false });
     // 윤 박사
     const yh = human({ coat: 0xe8e8e0, pants: 0x30384a, hair: 0x1a1210, long: 1, tail: 1, glasses: 1, lamp: 1, pack: 1, tablet: 1 });
     yoon = makeFollower(yh, LV.start.clone().add(new V3(-1.2, 0, -1)));
-    // 임무 물건
-    const t = m.type;
-    if (['survey', 'collect', 'power'].includes(t)) spots(m.goal).forEach(p => buildObj(t, p));
-    if (t === 'defend') { const rs = LV.rooms.filter(r => !r.start).sort((a, b) => Math.hypot(a.x - LV.rooms[0].x, a.z - LV.rooms[0].z) - Math.hypot(b.x - LV.rooms[0].x, b.z - LV.rooms[0].z)); const r = rs[Math.floor(rs.length * .45)] || rs[0]; buildObj('defend', r ? LV.cellC(r.x, r.z) : LV.start.clone().add(new V3(8, 0, 0))); }
+    // 임무 물건 (친구 컴퓨터는 방장이 정한 자리에 똑같이 둔다)
+    const t = m.type, at = ctx.objs && ctx.objs.map(o => new V3(o.x, 0, o.z));
+    if (['survey', 'collect', 'power'].includes(t)) (at || spots(m.goal)).forEach(p => buildObj(t, p));
+    if (t === 'defend') { const rs = LV.rooms.filter(r => !r.start).sort((a, b) => Math.hypot(a.x - LV.rooms[0].x, a.z - LV.rooms[0].z) - Math.hypot(b.x - LV.rooms[0].x, b.z - LV.rooms[0].z)); const r = rs[Math.floor(rs.length * .45)] || rs[0]; buildObj('defend', at ? at[0] : r ? LV.cellC(r.x, r.z) : LV.start.clone().add(new V3(8, 0, 0))); }
     if (t === 'rescue') {
       const d = LV.deep, p = LV.cellC(d.x, d.z);
       const h = human({ coat: 0x7a6a50, pants: 0x3a3a30, hair: 0x9a9a9a, vest: 0xe07020, pack: 0 });
@@ -186,9 +189,10 @@ const MISSIONRT = (() => {
       h.legs.forEach(l => l.rotation.x = -1.45); h.g.position.y = -.45;
       const sos = glow(0xff4020, 1.2); sos.position.y = 2.2; h.g.add(sos); surv.sos = sos;
     }
-    if (t === 'alpha') {
+    if (t === 'alpha' && !puppet) {
       const d = LV.deep; alphaC = CREATURES.spawn(m.sp, LV.cellC(d.x, d.z), { instant: true, alpha: true });
     }
+    if (puppet) S.alphaId = ctx.alpha || 0;
     if (t === 'survive') S.timer = 0;
   }
 
@@ -196,6 +200,7 @@ const MISSIONRT = (() => {
   function update(dt, talking) {
     if (!m) return;
     S.time += dt;
+    if (puppet) { updatePuppet(dt, talking); return; }
     // 주원이 멈춰 있으면 앞쪽 옆으로 나와서 얼굴을 보여 주고, 움직이면 뒤를 따라간다
     const still = Math.hypot(P.vel.x, P.vel.z) < 1;
     S.stillT = still ? (S.stillT || 0) + dt : 0;
@@ -227,9 +232,9 @@ const MISSIONRT = (() => {
         if (S.timer >= m.goal) complete();
       }
     }
-    // 지키기
+    // 지키기 (친구가 원 안에 있어도 된다)
     if (t === 'defend' && S.started && !S.ready) {
-      const o = objs[0], d = Math.hypot(P.pos.x - o.pos.x, P.pos.z - o.pos.z);
+      const o = objs[0], d = Math.min(Math.hypot(P.pos.x - o.pos.x, P.pos.z - o.pos.z), ...others().map(R => R.dead ? 1e9 : Math.hypot(R.pos.x - o.pos.x, R.pos.z - o.pos.z)));
       if (d < 9) { S.timer += dt; S.away = 0; } else { S.away += dt; if (S.away > 2 && ready('away', 12)) sayY(YOON.obj.defend.away); }
       S.prog = S.timer / m.goal;
       S.waveT -= dt;
@@ -284,7 +289,7 @@ const MISSIONRT = (() => {
 
   // ---------- 게임에서 알려 주는 일 ----------
   function onKill(c, weak) {
-    if (!m) return;
+    if (!m || puppet) return;
     const now = S.time; S.combo = S.combo.filter(t => now - t < 3.5); S.combo.push(now);
     if (m.type === 'hunt' && !S.ready && (!m.sp || c.sp === m.sp)) {
       S.kills++; S.prog = S.kills / m.goal;
@@ -297,7 +302,7 @@ const MISSIONRT = (() => {
     else if (Math.random() < .18 && ready('kill', 8)) sayLow(pick(YOON.kill));
   }
   function onSeen(c) {
-    if (!m || S.seen[c.sp]) return; S.seen[c.sp] = 1;
+    if (!m || puppet || S.seen[c.sp]) return; S.seen[c.sp] = 1;
     const l = YOON.seen[c.sp]; if (l) sayY(pick(l));
   }
   function onSample() { if (Math.random() < .4 && ready('sample', 20)) sayLow(pick(YOON.sample)); }
@@ -308,37 +313,55 @@ const MISSIONRT = (() => {
     const told = X.SAVE.gunTalk || (X.SAVE.gunTalk = []);
     if (told.includes(g.id) && !first) return;
     if (told.includes(g.id)) return;
-    told.push(g.id); YOON.newGun(g).forEach(t => sayY(t));
+    told.push(g.id); YOON.newGun(g).forEach(t => (X.sayLocal || X.say)(['윤 박사', t]));
   }
 
   // ---------- 상호작용 (E / F) ----------
   function interact() {
     if (!m || S.ready) return null;
-    const t = m.type;
+    // 친구 컴퓨터에서 누르면 방장에게 "이거 했어요"를 보낸다
+    const act = (k, i) => () => puppet ? X.ask(k, i) : doAct(k, i);
     if (surv && !surv.found && Math.hypot(P.pos.x - surv.pos.x, P.pos.z - surv.pos.z) < 2.6)
-      return { key: 'e', need: 1.2, text: '[E] 길게 눌러 구조하기', act: () => { surv.found = true; surv.sos.visible = false; surv.h.legs.forEach(l => l.rotation.x = 0); sayY(YOON.obj.rescue.found); sayY(YOON.obj.rescue.follow); X.toast('구조 성공! 무전기까지 데려가요'); AU.fx('scanDone'); } };
-    for (const o of objs) {
+      return { key: 'e', need: 1.2, text: '[E] 길게 눌러 구조하기', act: act('rescue', 0) };
+    for (let i = 0; i < objs.length; i++) {
+      const o = objs[i];
       if (o.done) continue;
       const d = Math.hypot(P.pos.x - o.pos.x, P.pos.z - o.pos.z);
-      if (o.type === 'survey' && d < 4.5) return { key: 'f', need: 1.4, text: '[F] 길게 눌러 신호기 스캔', act: () => doneObj(o) };
-      if (o.type === 'collect' && d < 2.4) return { key: 'e', need: .8, text: `[E] 길게 눌러 ${nameOf('collect')} 줍기`, act: () => doneObj(o) };
-      if (o.type === 'power' && d < 2.6) return { key: 'e', need: 2, text: `[E] 길게 눌러 ${nameOf('power')} 켜기`, act: () => doneObj(o) };
-      if (o.type === 'defend' && !S.started && d < 3) return { key: 'e', need: 1, text: `[E] 길게 눌러 ${nameOf('defend')} 작동`, act: () => { S.started = true; S.waveT = 5; o.head.material.emissiveIntensity = 1.4; sayY(YOON.obj.defend.start); AU.fx('scanDone'); } };
+      if (o.type === 'survey' && d < 4.5) return { key: 'f', need: 1.4, text: '[F] 길게 눌러 신호기 스캔', act: act('obj', i) };
+      if (o.type === 'collect' && d < 2.4) return { key: 'e', need: .8, text: `[E] 길게 눌러 ${nameOf('collect')} 줍기`, act: act('obj', i) };
+      if (o.type === 'power' && d < 2.6) return { key: 'e', need: 2, text: `[E] 길게 눌러 ${nameOf('power')} 켜기`, act: act('obj', i) };
+      if (o.type === 'defend' && !S.started && d < 3) return { key: 'e', need: 1, text: `[E] 길게 눌러 ${nameOf('defend')} 작동`, act: act('defend', i) };
     }
     return null;
   }
-  function doneObj(o) {
-    o.done = true; S.prog = objs.filter(x => x.done).length / objs.length;
-    const left = objs.filter(x => !x.done).length;
-    AU.fx(o.type === 'collect' ? 'sample' : 'scanDone');
+  // 방장 컴퓨터에서 실제로 하는 일 (내가 했든 친구가 했든)
+  function doAct(k, i, byFriend) {
+    if (!m || S.ready) return;
+    if (k === 'rescue' && surv && !surv.found) { surv.found = true; surv.sos.visible = false; surv.h.legs.forEach(l => l.rotation.x = 0); sayY(YOON.obj.rescue.found); sayY(YOON.obj.rescue.follow); X.toast(byFriend ? '친구가 실종자를 구했어요! 무전기까지 데려가요' : '구조 성공! 무전기까지 데려가요'); AU.fx('scanDone'); }
+    const o = objs[i];
+    if (k === 'obj' && o && !o.done) doneObj(o, byFriend);
+    if (k === 'defend' && o && !S.started) { S.started = true; S.waveT = 5; o.head.material.emissiveIntensity = 1.4; sayY(YOON.obj.defend.start); AU.fx('scanDone'); }
+  }
+  // 끝난 물건 모양 바꾸기 (방장 · 친구 둘 다 쓴다)
+  function showDone(o) {
+    o.done = true;
     if (o.type === 'survey') { o.head.material.color.set(0x30c060); o.head.material.emissive.set(0x40ff80); o.glow.material.color.set(0x40ff80); }
     if (o.type === 'power') {
       o.head.material.emissive.set(0x40ff60); o.glow.material.color.set(0x40ff60);
       const l = new THREE.PointLight(0xfff0c0, 1.5, 14, 2); l.position.set(0, 2.2, 0); o.g.add(l);
+    }
+    if (o.type === 'collect') o.g.visible = false;
+  }
+  function doneObj(o, byFriend) {
+    showDone(o); S.prog = objs.filter(x => x.done).length / objs.length;
+    const left = objs.filter(x => !x.done).length;
+    AU.fx(o.type === 'collect' ? 'sample' : 'scanDone');
+    if (o.type === 'power') {
       spawnNear(o.pos, 3 + Math.floor(Math.random() * 3), 12, 24);
       CREATURES.noise(o.pos, 40);
     }
-    if (o.type === 'collect') { o.g.visible = false; X.addMoney(40 + m.r * 25); }
+    if (o.type === 'collect' && !byFriend) X.addMoney(40 + m.r * 25);
+    if (o.type === 'collect' && byFriend && X.friendMoney) X.friendMoney(40 + m.r * 25);
     X.toast(`${nameOf(o.type)} ${objs.length - left}/${objs.length}`);
     const L = YOON.obj[o.type];
     if (left === 0) complete();
@@ -381,11 +404,70 @@ const MISSIONRT = (() => {
     if (yoon) out.push({ x: yoon.pos.x, z: yoon.pos.z, c: '#f3ece0', s: 2 });
     return out;
   }
-  function bossBar() { return alphaC && alphaC.state !== 'dead' && (alphaC.state !== 'idle' || S.alphaSeen) ? { hp: alphaC.hp / alphaC.max, n: alphaC.S.n } : null; }
-  function end() { m = null; yoon = null; surv = null; objs = []; alphaC = null; }
+  function bossBar() {
+    if (puppet && S.alphaId && (!alphaC || alphaC.state === undefined)) alphaC = CREATURES.byId(S.alphaId) || null;
+    return alphaC && alphaC.state !== 'dead' && (alphaC.state !== 'idle' || S.alphaSeen) ? { hp: alphaC.hp / alphaC.max, n: alphaC.S.n } : null;
+  }
+  function end() { m = null; yoon = null; surv = null; objs = []; alphaC = null; puppet = false; }
+
+  // ---------- 친구와 함께 ----------
+  const others = () => (X && X.others ? X.others() : []);
+  // 방장: 임무 물건 자리 (친구가 들어올 때 한 번 보낸다)
+  function layout() {
+    if (!m) return null;
+    return { objs: objs.map(o => ({ x: o.pos.x, z: o.pos.z })), alpha: alphaC ? alphaC.id : 0 };
+  }
+  const r2 = v => Math.round(v * 100) / 100;
+  // 방장: 지금 임무 상태 (자주 보낸다)
+  function snap() {
+    if (!m) return null;
+    return {
+      S: { prog: S.prog, ready: S.ready, started: S.started, timer: S.timer, kills: S.kills, alphaSeen: !!S.alphaSeen },
+      d: objs.map(o => o.done ? 1 : 0),
+      y: [r2(yoon.pos.x), r2(yoon.pos.z), r2(yoon.yaw)],
+      v: surv ? [r2(surv.pos.x), r2(surv.pos.z), r2(surv.yaw), surv.found ? 1 : 0] : null,
+    };
+  }
+  // 친구: 받은 상태로 바꾸기
+  function applySnap(d) {
+    if (!m || !puppet || !d) return;
+    Object.assign(S, d.S); X.RUN.ready = S.ready;
+    d.d.forEach((v, i) => { const o = objs[i]; if (o && v && !o.done) { showDone(o); AU.fx(o.type === 'collect' ? 'sample' : 'scanDone'); } });
+    yoon.net = d.y;
+    if (surv && d.v) {
+      surv.net = d.v;
+      if (d.v[3] && !surv.found) { surv.found = true; surv.sos.visible = false; surv.h.legs.forEach(l => l.rotation.x = 0); }
+    }
+  }
+  // 친구: 윤 박사와 구조한 사람은 방장이 알려 준 자리로 걸어간다
+  function walkTo(F, n, dt) {
+    if (!n) return 0;
+    const dx = n[0] - F.pos.x, dz = n[1] - F.pos.z, d = Math.hypot(dx, dz);
+    if (d > 8) F.pos.set(n[0], 0, n[1]);
+    else { const k = Math.min(1, dt * 8); F.pos.x += dx * k; F.pos.z += dz * k; }
+    let dy = n[2] - F.yaw; while (dy > PI) dy -= PI * 2; while (dy < -PI) dy += PI * 2; F.yaw += dy * Math.min(1, dt * 8);
+    F.h.g.position.x = F.pos.x; F.h.g.position.z = F.pos.z; F.h.g.rotation.y = F.yaw;
+    const spd = Math.min(8, d * 8 * (dt > 0 ? 1 : 0));
+    F.spd = (F.spd || 0) + (spd - (F.spd || 0)) * Math.min(1, dt * 6);
+    return F.spd;
+  }
+  function updatePuppet(dt, talking) {
+    animHuman(yoon.h, walkTo(yoon, yoon.net, dt), dt, talking);
+    objs.forEach(o => {
+      o.t += dt;
+      if (o.glow) o.glow.material.opacity = o.done ? .4 : .6 + Math.sin(o.t * 4) * .4;
+      if (o.spin) o.spin.rotation.y += dt;
+      if (o.type === 'survey' && !o.done) o.head.rotation.y += dt * 2;
+      if (o.ring) o.ring.material.opacity = S.started && !S.ready ? .25 + Math.sin(o.t * 3) * .1 : .12;
+    });
+    if (surv) {
+      if (surv.found) animHuman(surv.h, walkTo(surv, surv.net, dt), dt, false);
+      else { surv.sos.visible = Math.sin(S.time * 5) > 0; surv.h.g.position.set(surv.pos.x, -.45, surv.pos.z); }
+    }
+  }
 
   return {
-    start, update, end, interact, lines, navTarget, mapPoints, bossBar,
+    start, update, end, interact, lines, navTarget, mapPoints, bossBar, layout, snap, applySnap, doAct, human, animHuman,
     onKill, onSeen, onSample, onScan, onEmpty, onEquip,
     get ready() { return S.ready; }, get prog() { return S.prog || 0; }, get mission() { return m; }, get yoon() { return yoon; },
   };

@@ -65,18 +65,18 @@ const AU = (() => {
   }
 
   // ---------- 총소리 ----------
-  function shot(st, cal) {
+  function shot(st, cal, k = 1, pan = 0) { // k·pan: 친구 총소리는 멀수록 작게
     if (!ctx) return;
     const t = now(), d = st.dmg * st.pellets;
-    if (st.ex) { const b = bus(.9, 0, .5); tn(b, t, 120, 45, .25, .8, 'sine'); nz(b, t, .3, 800, .6, 'lowpass', .6); return; }
+    if (st.ex) { const b = bus(.9 * k, pan, .5); tn(b, t, 120, 45, .25, .8, 'sine'); nz(b, t, .3, 800, .6, 'lowpass', .6); return; }
     const low = clamp(150 - d * .4, 45, 140), crack = clamp(5200 - d * 18, 1300, 5200), len = clamp(.07 + d / 650, .07, .45);
     if (st.sup) {
-      const b = bus(.45, 0, .12);
+      const b = bus(.45 * k, pan, .12);
       nz(b, t, .09, 1400, .8, 'lowpass', .6); tn(b, t, 300, 120, .05, .25, 'triangle'); nz(b, t + .01, .05, 4000, 2, 'bandpass', .15);
       return;
     }
     const g = clamp(.45 + d / 220, .45, 1.1);
-    const b = bus(g, 0, .6);
+    const b = bus(g * k, pan, .6);
     nz(b, t, len * .6, crack, .5, 'lowpass', .9);
     nz(b, t, len, 600, .7, 'lowpass', .7, 120);
     tn(b, t, low * 2, low * .5, len * .8, .9, 'sine');

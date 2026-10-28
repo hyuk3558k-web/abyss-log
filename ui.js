@@ -148,6 +148,7 @@ const UI = (() => {
   let jSel = 'tick';
   function showHub(t) {
     GAME.state = 'menu'; S.started = true; GAME.save();
+    partyMsg = '';
     if (t) tab = t;
     only('hub'); pv.active = false;
     setMenuGun(S.loadout[0] || 'glock17');
@@ -190,11 +191,15 @@ const UI = (() => {
       }).join('') + (anyDone ? `<div class="chap"><div class="num">자유 사냥</div><h3 class="sm">${esc(R.n)}에서 돈 벌기</h3><p>임무 없이 괴물을 사냥해요. 원할 때 무전기로 돌아오면 돼요.</p><div class="row"><button class="btn ghost" data-go="hunt" data-i="${list.filter(([x]) => mDone(x.id)).pop()[0].id}" type="button">자유 사냥</button></div></div>` : '') + '</div>';
     });
     const range = `<div class="region"><div class="num">훈련</div><h3>사격장</h3></div><div class="chapters"><div class="chap"><p>모든 총을 사기 전에 직접 쏴 볼 수 있어요. 총기 상점에서 총을 고르고 ‘사격장에서 시험’을 눌러도 돼요.</p><div class="row"><button class="btn small bio" data-go="range" data-i="m1" type="button">사격장 가기</button></div></div></div>`;
-    $('pane').innerHTML = loadoutBar() + html + range;
+    const pb = partyBar();
+    $('pane').innerHTML = pb + loadoutBar() + html + range;
     $('pane').querySelectorAll('[data-go]').forEach(b => b.onclick = () => go(b.dataset.i, b.dataset.go));
-    const nx = $('nextMission'); if (nx && MISSIONS.indexOf(MISSION[nx.querySelector('[data-i]') ? nx.querySelector('[data-i]').dataset.i : 'm1']) > 0) setTimeout(() => nx.scrollIntoView({ block: 'center' }), 30);
+    bindPartyBar();
+    const nx = $('nextMission'); if (!pb && nx &&MISSIONS.indexOf(MISSION[nx.querySelector('[data-i]') ? nx.querySelector('[data-i]').dataset.i : 'm1']) > 0) setTimeout(() => nx.scrollIntoView({ block: 'center' }), 30);
   }
   function go(i, mode, opts) {
+    // 친구 파티에서는 방장만 임무를 고른다 (사격장은 혼자 가도 된다)
+    if (NET.isGuest && mode !== 'range') { AU.fx('ui'); partyMsg = '파티에서는 방장이 임무를 골라요. 방장이 시작하면 자동으로 같이 들어가요!'; renderHub(); return; }
     AU.init(); AU.fx('chapter');
     pv.active = false; only('loading');
     setTimeout(() => { hideAll(); GAME.startLevel(i, mode, opts); }, 60);
@@ -316,7 +321,7 @@ const UI = (() => {
   // ---------------------------------------------------------------
   //  일시정지 · 죽음 · 결과
   // ---------------------------------------------------------------
-  function showPause() { syncSettings(); only('pause'); $('hud').hidden = true; $('touch').hidden = true; }
+  function showPause() { syncSettings(); only('pause'); $('hud').hidden = true; $('touch').hidden = true; $('pauseCoop').hidden = !NET.on; }
   $('btnResume').onclick = () => GAME.resume();
   // 핸드폰 버튼 배치 바꾸기 (일시정지 화면 · 처음 화면)
   $('btnTouchEdit').onclick = () => { $('pause').hidden = true; GAME.editTouch(() => showPause()); };
@@ -404,8 +409,67 @@ const UI = (() => {
       <a class="btn" href="${sequelHref()}" target="_blank" rel="noopener">2편 하러 가기 →</a></div>`;
   }
 
+  // ---------------------------------------------------------------
+  //  친구와 함께 (파티)
+  // ---------------------------------------------------------------
+  let partyOpen = false, partyMsg = '';
+  function openParty() { AU.init(); AU.fx('ui'); partyOpen = true; $('party').hidden = false; renderParty(); }
+  function closeParty() { AU.fx('ui'); partyOpen = false; $('party').hidden = true; if (!$('hub').hidden) renderHub(); }
+  $('btnParty').onclick = openParty;
+  $('btnParty2').onclick = openParty;
+  $('btnPartyClose').onclick = closeParty;
+  function renderParty() {
+    if (!partyOpen) return;
+    const s = NET.st;
+    let h = `<div class="pfield"><label for="pNick">내 이름</label><input id="pNick" maxlength="12" placeholder="탐사대원" value="${esc(S.nick || '')}"></div>`;
+    if (s.status === 'off') {
+      h += `<p class="lead" style="margin:0">한 명이 <b>파티 만들기</b>를 누르면 숫자 4개짜리 코드가 나와요. 다른 한 명은 그 코드를 넣고 <b>참가</b>를 누르면 돼요.</p>
+        <div class="row"><button class="btn" id="pHost" type="button">파티 만들기</button></div>
+        <div class="row pjoin"><input id="pCode" inputmode="numeric" maxlength="4" placeholder="코드" aria-label="방 코드 4자리"><button class="btn ghost" id="pJoin" type="button">참가</button></div>`;
+    } else if (s.status === 'making' || s.status === 'joining') {
+      h += `<p class="lead" style="margin:0">${s.status === 'making' ? '방을 만드는 중…' : `방 ${esc(s.code)}에 연결하는 중…`}</p><div class="row"><button class="btn ghost" id="pLeave" type="button">취소</button></div>`;
+    } else if (s.status === 'waiting') {
+      h += `<div class="pcode">${esc(s.code)}</div><p class="lead" style="margin:0;text-align:center">이 코드를 친구에게 알려 주세요.<br>친구를 기다리는 중…</p><div class="row"><button class="btn" id="pGo" type="button">캠프로 가기</button><button class="btn ghost" id="pLeave" type="button">파티 끝내기</button></div>`;
+    } else if (s.status === 'linked') {
+      h += `<p class="pok">✅ <b>${esc(s.friend)}</b>와(과) 연결됐어요!</p>
+        <p class="lead" style="margin:0">${NET.isHost ? '내가 <b>방장</b>이에요. 캠프에서 임무를 고르면 친구도 같이 들어와요.' : '친구가 <b>방장</b>이에요. 방장이 임무를 고르면 나도 자동으로 들어가요.'}</p>
+        <div class="row"><button class="btn" id="pGo" type="button">캠프로 가기</button><button class="btn ghost" id="pLeave" type="button">파티 나가기</button></div>`;
+    }
+    const msg = s.msg || partyMsg;
+    if (msg && s.status !== 'linked') h += `<p class="perr">${esc(msg)}</p>`;
+    h += `<p class="lead" style="margin:0;font-size:12px">같은 편끼리만 같이 할 수 있어요 (1편은 1편끼리). 둘 다 인터넷이 연결돼 있어야 해요. 돈·총·조사 기록은 각자 컴퓨터에 저장되고, 잡은 괴물의 돈은 둘 다 받아요.</p>`;
+    $('partyBody').innerHTML = h;
+    $('pNick').oninput = e => { S.nick = e.target.value.slice(0, 12); GAME.save(); };
+    const on = (id, f) => { const el = $(id); if (el) el.onclick = () => { AU.fx('ui'); partyMsg = ''; f(); }; };
+    on('pHost', () => NET.host());
+    on('pJoin', () => NET.join($('pCode').value));
+    on('pLeave', () => NET.leave());
+    on('pGo', () => { partyOpen = false; $('party').hidden = true; showHub('expedition'); });
+    const pc = $('pCode');
+    if (pc) { pc.onkeydown = e => { if (e.key === 'Enter') { partyMsg = ''; NET.join(pc.value); } }; pc.oninput = () => { pc.value = pc.value.replace(/\D/g, '').slice(0, 4); }; }
+  }
+  // 캠프 탐사 화면 맨 위 파티 알림
+  function partyBar() {
+    const s = NET.st, lob = GAME.lobby;
+    if (s.status === 'linked') {
+      const say = NET.isHost ? '내가 방장 · 임무를 고르면 친구도 같이 가요' : lob ? `방장이 지금 “${esc(lob.n)}” 하는 중이에요` : '방장이 임무를 고르면 자동으로 들어가요';
+      return `<div class="partybar"><b>👥 ${esc(s.friend)}와(과) 파티 중</b><span>${say}</span>${NET.isGuest && lob ? '<button class="btn small" id="pJoinNow" type="button">지금 합류하기</button>' : ''}<button class="btn ghost small" id="pOpen" type="button">파티</button></div>`
+        + (partyMsg ? `<div class="partybar warn"><span>${esc(partyMsg)}</span></div>` : '');
+    }
+    if (s.status === 'waiting') return `<div class="partybar"><b>👥 방 코드 ${esc(s.code)}</b><span>친구를 기다리는 중… 먼저 임무를 시작해도 친구가 나중에 들어올 수 있어요.</span><button class="btn ghost small" id="pOpen" type="button">파티</button></div>`;
+    if (partyMsg) return `<div class="partybar warn"><span>${esc(partyMsg)}</span><button class="btn ghost small" id="pOpen" type="button">파티</button></div>`;
+    return '';
+  }
+  function bindPartyBar() {
+    const a = $('pOpen'); if (a) a.onclick = openParty;
+    const b = $('pJoinNow'); if (b) b.onclick = () => { AU.init(); AU.fx('chapter'); partyMsg = ''; only('loading'); GAME.joinHost(); setTimeout(() => { if (!$('loading').hidden) showHub('expedition'); }, 8000); };
+  }
+  function partyChanged() { renderParty(); if (!$('hub').hidden && tab === 'expedition') { const y = $('pane').scrollTop; renderExpedition(); $('pane').scrollTop = y; } }
+  function partyNote(msg) { partyMsg = msg; partyChanged(); }
+  NET.watch(() => partyChanged());
+
   // 시작
   showTitle();
 
-  return { showHub, showPause, showDeath, showResult, showReport, showNews, hideAll, menuRender, showTitle };
+  return { showHub, showPause, showDeath, showResult, showReport, showNews, hideAll, menuRender, showTitle, partyChanged, partyNote };
 })();
