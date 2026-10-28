@@ -955,15 +955,36 @@ const GAME = (() => {
   // ---------------------------------------------------------------
   //  입력
   // ---------------------------------------------------------------
+  // 마우스 잠금은 사용자가 클릭한 순간에만 된다. 친구가 시작해서 저절로 들어온 판이면
+  // 잠금이 실패하는데, 그걸 "잠금이 안 되는 곳"으로 착각하면 안 된다 → 클릭 안내만 띄운다
+  let lockTry = false;
+  function gesture() { return !navigator.userActivation || navigator.userActivation.isActive; }
   function lock() {
     if (isTouch || noLock) return;
+    if (!gesture()) return;
+    lockTry = true;
     try { const p = renderer.domElement.requestPointerLock(); if (p && p.catch) p.catch(onLockErr); } catch (e) { onLockErr(); }
   }
-  function onLockErr() { if (everLocked) { if (state === 'playing') pause(); } else noLock = true; }
+  function onLockErr() {
+    if (!lockTry) return; lockTry = false;
+    if (everLocked) { if (state === 'playing') pause(); } else noLock = true;
+  }
+  let lockHint = null;
+  function updateLockHint() {
+    const on = state === 'playing' && !locked && !noLock && !isTouch && !P.dead;
+    if (!lockHint) {
+      if (!on) return;
+      lockHint = document.createElement('div');
+      lockHint.textContent = '🖱 화면을 한 번 클릭하세요 — 조준이 마우스에 붙어요';
+      lockHint.style.cssText = 'position:fixed;left:50%;top:58%;transform:translateX(-50%);padding:12px 20px;border-radius:12px;background:rgba(10,12,16,.82);color:#ffe6a8;font:600 17px system-ui,sans-serif;border:1px solid rgba(255,200,120,.5);pointer-events:none;z-index:5;text-align:center;max-width:calc(100vw - 32px)';
+      document.body.appendChild(lockHint);
+    }
+    lockHint.hidden = !on;
+  }
   document.addEventListener('pointerlockerror', onLockErr);
   document.addEventListener('pointerlockchange', () => {
     locked = document.pointerLockElement === renderer.domElement;
-    if (locked) everLocked = true; else if (state === 'playing' && !P.dead) pause();
+    if (locked) { everLocked = true; lockTry = false; } else if (state === 'playing' && !P.dead) pause();
   });
   function pause() {
     if (state !== 'playing') return;
@@ -1307,6 +1328,7 @@ const GAME = (() => {
   function frame() {
     requestAnimationFrame(frame);
     const dt = Math.min(.05, clock.getDelta());
+    updateLockHint();
     if ((state === 'playing' || (state === 'paused' && coopOn())) && LV) step(dt);
     else if (state === 'menu') { if (typeof UI !== 'undefined' && UI.menuRender) UI.menuRender(dt); return; }
     renderer.clear();
