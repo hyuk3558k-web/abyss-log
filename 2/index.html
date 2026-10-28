@@ -1,0 +1,440 @@
+<title>심연 탐사록 2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;600;800&family=IBM+Plex+Mono:wght@500;700&family=Nanum+Myeongjo:wght@700;800&display=swap">
+<style>
+/* 레이아웃: 화면 전체가 3D, 그 위에 HUD와 탐험 장비 같은 패널 화면이 겹친다 */
+:root {
+  --bg: #0b0c0e;
+  --panel: #15171b;
+  --panel2: #1e2127;
+  --line: rgba(255, 230, 190, .12);
+  --fg: #efe9df;
+  --muted: #9a958c;
+  --lamp: #f2c14e;
+  --bio: #4fd6c4;
+  --danger: #e5484d;
+  --paper: #ece4d2;
+  --ink: #1d1a16;
+  --f-display: 'Black Han Sans', 'Malgun Gothic', sans-serif;
+  --f-body: 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+  --f-mono: 'IBM Plex Mono', 'Consolas', monospace;
+  --f-news: 'Nanum Myeongjo', 'Batang', serif;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; overflow: hidden; background: var(--bg); color: var(--fg); font-family: var(--f-body); -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+#game, #game canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+button { font-family: inherit; color: inherit; }
+.mono { font-family: var(--f-mono); }
+.lbl { font-family: var(--f-mono); font-size: 11px; letter-spacing: .14em; color: var(--muted); text-transform: uppercase; }
+
+/* ---------- HUD ---------- */
+#hud { position: fixed; inset: 0; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,.75), 0 0 1px rgba(0,0,0,.9); }
+.obj { position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); left: calc(14px + env(safe-area-inset-left, 0px)); width: min(330px, 46vw); background: rgba(11,12,14,.6); border-left: 3px solid var(--bio); padding: 10px 12px; }
+#objTitle { font-family: var(--f-display); font-size: 18px; margin-bottom: 6px; }
+#objList { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
+#objList li { display: flex; justify-content: space-between; gap: 10px; }
+#objList li.done span { color: var(--bio); text-decoration: line-through; text-decoration-color: rgba(79,214,196,.5); }
+#objList em { font-style: normal; font-family: var(--f-mono); color: var(--lamp); white-space: nowrap; }
+.objbar { height: 3px; background: rgba(255,255,255,.1); margin-top: 8px; }
+#objBar { height: 100%; width: 0; background: var(--bio); transition: width .3s; }
+#minimap { position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); right: calc(14px + env(safe-area-inset-right, 0px)); width: 150px; height: 150px; border-radius: 50%; background: rgba(11,12,14,.55); border: 1px solid var(--line); }
+#money { position: absolute; top: calc(170px + env(safe-area-inset-top, 0px)); right: calc(14px + env(safe-area-inset-right, 0px)); font-family: var(--f-mono); font-weight: 700; color: var(--lamp); font-size: 15px; text-align: right; }
+#cashFeed { position: absolute; top: calc(192px + env(safe-area-inset-top, 0px)); right: calc(14px + env(safe-area-inset-right, 0px)); display: grid; gap: 2px; justify-items: end; }
+.cash { font-family: var(--f-mono); font-size: 13px; color: var(--lamp); animation: rise 1.8s forwards; }
+@keyframes rise { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-14px); } }
+.hpbox { position: absolute; left: calc(14px + env(safe-area-inset-left, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); width: min(260px, 40vw); display: grid; gap: 5px; }
+#hpNum { font-family: var(--f-mono); font-weight: 700; font-size: 34px; line-height: 1; }
+.hpbar { height: 7px; background: rgba(255,255,255,.12); }
+#hpFill { height: 100%; width: 100%; background: var(--bio); transition: width .15s; }
+#hpFill.low { background: var(--danger); }
+.ammobox { position: absolute; right: calc(14px + env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); text-align: right; display: grid; gap: 3px; justify-items: end; }
+#ammoNum { font-family: var(--f-mono); font-weight: 700; font-size: 44px; line-height: 1; }
+#ammoNum.empty { color: var(--danger); }
+#ammoMax { font-family: var(--f-mono); color: var(--muted); font-size: 18px; margin-left: 6px; }
+#gunName { font-family: var(--f-display); font-size: 18px; color: var(--lamp); }
+#fireMode, #reloadMsg { font-size: 12px; color: var(--muted); }
+#reloadMsg { color: var(--fg); min-height: 1.2em; }
+#slots { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.slot { font-size: 11px; padding: 2px 7px; background: rgba(11,12,14,.6); color: var(--muted); border: 1px solid transparent; }
+.slot b { color: var(--fg); margin-right: 5px; font-family: var(--f-mono); }
+.slot.on { border-color: var(--lamp); color: var(--fg); }
+#cross { position: absolute; left: 50%; top: 50%; width: 0; height: 0; --g: 6px; }
+#cross i { position: absolute; background: var(--fg); box-shadow: 0 0 2px #000; }
+#cross .t, #cross .b { width: 2px; height: 8px; left: -1px; }
+#cross .l, #cross .r { height: 2px; width: 8px; top: -1px; }
+#cross .t { bottom: var(--g); } #cross .b { top: var(--g); } #cross .l { right: var(--g); } #cross .r { left: var(--g); }
+#cross .d { width: 2px; height: 2px; left: -1px; top: -1px; }
+#hitmark { position: absolute; left: 50%; top: 50%; width: 24px; height: 24px; transform: translate(-50%,-50%) rotate(45deg); opacity: 0; }
+#hitmark::before, #hitmark::after { content: ""; position: absolute; background: var(--fg); }
+#hitmark::before { left: 11px; top: 0; width: 2px; height: 24px; clip-path: polygon(0 0,100% 0,100% 35%,0 35%,0 65%,100% 65%,100% 100%,0 100%); }
+#hitmark::after { top: 11px; left: 0; height: 2px; width: 24px; clip-path: polygon(0 0,35% 0,35% 100%,0 100%,0 0,65% 0,100% 0,100% 100%,65% 100%); }
+#hitmark.weak::before, #hitmark.weak::after { background: var(--danger); }
+#hitmark.kill { width: 34px; height: 34px; }
+#dmgdir { position: absolute; left: 50%; top: 50%; width: 220px; height: 220px; opacity: 0; }
+#dmgdir::before { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 6px solid transparent; border-top-color: var(--danger); clip-path: polygon(30% 0, 70% 0, 50% 50%); }
+#vig { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 45%, rgba(170,15,10,.8) 100%); opacity: 0; }
+/* 렌즈 느낌: 가장자리가 살짝 어둡고, 아주 옅은 필름 알갱이 */
+#lens { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 52%, rgba(0,0,0,.42) 100%); }
+#grain { position: absolute; inset: -60px; opacity: .07; background-size: 160px 160px; animation: grain .5s steps(4) infinite; mix-blend-mode: overlay; }
+@keyframes grain { 0% { transform: translate(0,0); } 25% { transform: translate(-37px,21px); } 50% { transform: translate(18px,-44px); } 75% { transform: translate(-21px,-13px); } 100% { transform: translate(0,0); } }
+/* 영화 연출: 위아래 검은 띠 + 제목 */
+#cine .bar { position: absolute; left: 0; right: 0; height: 11vh; background: #000; transition: transform .7s cubic-bezier(.2,.8,.3,1); }
+#cine .bar.t { top: 0; transform: translateY(-100%); } #cine .bar.b { bottom: 0; transform: translateY(100%); }
+#cine.on .bar { transform: none; }
+#cine .card { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); text-align: center; width: min(760px, 92vw); opacity: 0; transition: opacity .8s, letter-spacing 1.6s; letter-spacing: .02em; }
+#cine.on .card { opacity: 1; letter-spacing: .06em; }
+#cineEye { font-family: var(--f-mono); font-size: 13px; letter-spacing: .3em; color: var(--bio); }
+#cineTitle { font-family: var(--f-display); font-size: clamp(40px, 8vw, 84px); line-height: 1.05; margin: 8px 0; text-shadow: 0 4px 30px rgba(0,0,0,.8); }
+#cineSub { font-size: 15px; color: rgba(239,233,223,.8); line-height: 1.6; text-shadow: 0 2px 10px #000; letter-spacing: 0; }
+#cine.boss #cineEye { color: var(--danger); animation: blink .5s steps(2) infinite; }
+#cine.boss #cineTitle { color: #ff6a9a; }
+@keyframes blink { 50% { opacity: .2; } }
+#banner { position: absolute; left: 0; right: 0; top: 30%; text-align: center; padding: 14px 0; background: linear-gradient(90deg, transparent, rgba(11,12,14,.82) 20%, rgba(11,12,14,.82) 80%, transparent); opacity: 0; transform: scaleY(0); transition: opacity .35s, transform .35s; }
+#banner.on { opacity: 1; transform: none; }
+#bannerT { font-family: var(--f-display); font-size: clamp(28px, 5vw, 46px); color: var(--lamp); letter-spacing: .08em; }
+#bannerS { font-size: 14px; color: var(--fg); margin-top: 2px; }
+@media (prefers-reduced-motion: reduce) { #grain { animation: none; } }
+#scope { position: absolute; inset: 0; background: radial-gradient(circle at center, transparent 0, transparent min(38vh, 38vw), #000 calc(min(38vh, 38vw) + 2px)); }
+#scope::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: rgba(0,0,0,.85); }
+#scope::after { content: ""; position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: rgba(0,0,0,.85); }
+#scope.nv { background: radial-gradient(circle at center, rgba(60,255,110,.06) 0, rgba(60,255,110,.12) min(38vh, 38vw), #000 calc(min(38vh, 38vw) + 2px)); }
+#scope.nv::before, #scope.nv::after { background: rgba(120,255,150,.75); }
+#scope.nv b { position: absolute; left: 50%; top: calc(50% + min(30vh, 30vw)); transform: translateX(-50%); font: 600 11px var(--f-mono); color: #7fffa0; letter-spacing: .2em; }
+#scope:not(.nv) b { display: none; }
+#scope i { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; background: #ff3020; border-radius: 50%; }
+#prompt { position: absolute; left: 50%; top: 60%; transform: translateX(-50%); background: rgba(11,12,14,.7); padding: 6px 14px; font-size: 14px; border: 1px solid var(--line); white-space: nowrap; max-width: 92vw; overflow: hidden; text-overflow: ellipsis; }
+#hold { position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px; border-radius: 50%; --p: 0; background: conic-gradient(var(--bio) calc(var(--p) * 360deg), rgba(255,255,255,.12) 0); -webkit-mask: radial-gradient(circle, transparent 23px, #000 24px); mask: radial-gradient(circle, transparent 23px, #000 24px); }
+#sub { position: absolute; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(620px, 90vw); background: rgba(11,12,14,.78); padding: 10px 14px; border-left: 3px solid var(--lamp); }
+#subWho { font-family: var(--f-mono); font-size: 12px; color: var(--lamp); letter-spacing: .1em; }
+#subText { font-size: 15px; line-height: 1.5; margin-top: 2px; }
+#toasts { position: absolute; left: 50%; top: calc(14px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); display: grid; gap: 4px; justify-items: center; }
+#toasts div { background: rgba(11,12,14,.75); border: 1px solid rgba(79,214,196,.4); color: var(--bio); font-size: 13px; padding: 4px 12px; animation: fade 3.2s forwards; }
+@keyframes fade { 0% { opacity: 0; } 8%, 80% { opacity: 1; } 100% { opacity: 0; } }
+#feed { position: absolute; right: calc(14px + env(safe-area-inset-right, 0px)); bottom: calc(120px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 3px; justify-items: end; }
+#feed div { font-size: 13px; background: rgba(11,12,14,.65); padding: 3px 10px; border-right: 3px solid var(--lamp); animation: fade 2.6s forwards; }
+#feed div.weak { border-right-color: var(--danger); }
+#bossBar { position: absolute; left: 50%; top: calc(54px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); width: min(520px, 70vw); text-align: center; }
+#bossBar .nm { font-family: var(--f-display); font-size: 20px; color: #ff6a9a; }
+#bossBar .bar { height: 8px; background: rgba(255,255,255,.12); margin-top: 4px; }
+#bossFill { height: 100%; background: linear-gradient(90deg, #ff2a6a, #ff8ab0); }
+#nav { position: absolute; left: 50%; top: calc(100px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); display: grid; justify-items: center; gap: 2px; }
+#navArrow { width: 0; height: 0; border-left: 9px solid transparent; border-right: 9px solid transparent; border-bottom: 18px solid var(--lamp); filter: drop-shadow(0 0 4px rgba(242,193,78,.6)); }
+#navDist { font-family: var(--f-mono); font-size: 12px; color: var(--lamp); }
+#pops { position: absolute; inset: 0; overflow: hidden; }
+.pop { position: absolute; left: 0; top: 0; font-family: var(--f-mono); font-weight: 700; font-size: 15px; color: var(--fg); text-shadow: 0 1px 3px #000; }
+.pop.weak { color: #ff6050; font-size: 18px; }
+
+/* ---------- 터치 ---------- */
+#touch { position: fixed; inset: 0; touch-action: none; }
+#stick { position: absolute; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%; border: 2px solid rgba(255,255,255,.25); background: rgba(0,0,0,.2); display: none; pointer-events: none; }
+#knob { position: absolute; left: 35px; top: 35px; width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,.35); }
+.tbtn { position: absolute; border-radius: 50%; border: 2px solid rgba(255,255,255,.3); background: rgba(11,12,14,.45); font-size: 13px; font-weight: 600; touch-action: none; }
+.tbtn.on { border-color: var(--lamp); color: var(--lamp); }
+#tFire { width: 88px; height: 88px; right: calc(26px + env(safe-area-inset-right, 0px)); bottom: calc(130px + env(safe-area-inset-bottom, 0px)); border-color: var(--lamp); }
+#tAim { width: 58px; height: 58px; right: calc(124px + env(safe-area-inset-right, 0px)); bottom: calc(190px + env(safe-area-inset-bottom, 0px)); }
+#tJump { width: 56px; height: 56px; right: calc(128px + env(safe-area-inset-right, 0px)); bottom: calc(110px + env(safe-area-inset-bottom, 0px)); }
+#tReload { width: 50px; height: 50px; right: calc(40px + env(safe-area-inset-right, 0px)); bottom: calc(232px + env(safe-area-inset-bottom, 0px)); }
+#tSwap { width: 50px; height: 50px; right: calc(100px + env(safe-area-inset-right, 0px)); bottom: calc(262px + env(safe-area-inset-bottom, 0px)); }
+#tUse { width: 54px; height: 54px; left: 50%; margin-left: 40px; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); border-color: var(--bio); }
+#tScan { width: 54px; height: 54px; left: 50%; margin-left: -94px; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); border-color: var(--bio); }
+#tPause { width: 40px; height: 40px; left: 50%; margin-left: -20px; top: calc(10px + env(safe-area-inset-top, 0px)); }
+body.touch .pc { display: none; }
+body:not(.touch) .tc { display: none; }
+
+/* ---------- 메뉴 화면 공통 ---------- */
+.screen { position: fixed; inset: 0; overflow-y: auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px; }
+.btn { font-family: var(--f-display); font-size: 21px; background: var(--lamp); color: #16120a; border: 0; padding: 12px 28px; cursor: pointer; clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%); }
+.btn:hover { filter: brightness(1.1); }
+.btn:disabled { background: #3a3830; color: #777; cursor: not-allowed; filter: none; }
+.btn.ghost { background: transparent; color: var(--fg); box-shadow: inset 0 0 0 1px var(--line); clip-path: none; font-family: var(--f-body); font-weight: 600; font-size: 15px; padding: 10px 18px; }
+.btn.small { font-size: 15px; padding: 8px 16px; }
+.btn.bio { background: var(--bio); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--lamp); outline-offset: 2px; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.set { display: grid; grid-template-columns: auto 1fr auto; gap: 8px 12px; align-items: center; font-size: 14px; color: var(--muted); max-width: 380px; }
+.set input { accent-color: var(--lamp); width: 100%; }
+
+/* 타이틀 */
+#title { display: grid; align-items: end; background: linear-gradient(0deg, rgba(11,12,14,.95) 0%, rgba(11,12,14,.3) 55%, rgba(11,12,14,0) 100%); }
+.tcard { max-width: 620px; display: grid; gap: 16px; padding-bottom: 40px; padding-left: clamp(0px, 4vw, 56px); }
+.eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: .32em; color: var(--bio); }
+h1 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: clamp(58px, 13vw, 128px); line-height: .9; letter-spacing: -.01em; }
+h1 span { color: var(--lamp); }
+.lead { margin: 0; color: var(--muted); line-height: 1.65; max-width: 44ch; }
+.confirm { background: var(--panel); border: 1px solid var(--line); padding: 12px; display: grid; gap: 10px; max-width: 420px; }
+
+/* 프롤로그 */
+#prologue { display: grid; place-items: center; background: #000; }
+.pro { max-width: 640px; display: grid; gap: 24px; text-align: center; }
+#proText { font-size: clamp(18px, 3.4vw, 24px); line-height: 1.7; min-height: 6em; }
+#proText p { margin: 0 0 10px; animation: fadein 1.2s both; }
+@keyframes fadein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* 캠프 */
+#hub { background: rgba(11,12,14,.86); padding-block: 0; }
+.hubtop { position: sticky; top: 0; z-index: 2; background: var(--bg); border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; padding: calc(10px + env(safe-area-inset-top, 0px)) 0 0; }
+.hubtop .brand { font-family: var(--f-display); font-size: 22px; }
+.hubtop .wallet { margin-left: auto; font-family: var(--f-mono); font-weight: 700; color: var(--lamp); font-size: 18px; }
+.tabs { display: flex; gap: 2px; width: 100%; overflow-x: auto; }
+.tab { background: none; border: 0; border-bottom: 3px solid transparent; padding: 10px 14px; font-weight: 600; font-size: 15px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.tab.on { color: var(--fg); border-bottom-color: var(--lamp); }
+.pane { padding-block: 18px 40px; }
+.loadbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 14px; font-size: 13px; }
+.lslot { background: var(--panel); border: 1px solid var(--line); padding: 6px 10px; min-width: 120px; }
+.lslot b { font-family: var(--f-mono); color: var(--lamp); margin-right: 6px; }
+
+/* 탐사 카드 */
+.chapters { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.chap { background: var(--panel); border: 1px solid var(--line); padding: 16px; display: grid; gap: 10px; align-content: start; position: relative; }
+.chap .num { font-family: var(--f-mono); color: var(--muted); font-size: 12px; letter-spacing: .14em; }
+.chap h3 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: 24px; }
+.chap p { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.55; }
+.chap.locked { opacity: .45; }
+.region { margin: 18px 0 8px; display: grid; gap: 4px; }
+.region h3 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: 26px; }
+.region .num { font-family: var(--f-mono); color: var(--lamp); font-size: 12px; letter-spacing: .14em; }
+.region p { margin: 0; color: var(--muted); font-size: 13.5px; }
+.prog { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+.prog .bar { flex: 1; height: 6px; background: rgba(255,255,255,.08); }
+.prog .bar i { display: block; height: 100%; background: var(--lamp); }
+.chap.next { border-color: var(--lamp); box-shadow: 0 0 0 1px var(--lamp) inset; }
+.chap .type { display: inline-block; font-size: 12px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 99px; color: var(--fg); }
+.chap h3.sm { font-size: 20px; }
+@media (max-width: 560px) { .chapters { grid-template-columns: minmax(0, 1fr); } .lslot { min-width: 0; flex: 1 1 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .loadbar .lbl { flex-basis: 100%; } .chap, .region { min-width: 0; overflow-wrap: anywhere; } #hub { overflow-x: hidden; } }
+.stamp { position: absolute; top: 14px; right: 14px; border: 2px solid var(--bio); color: var(--bio); font-family: var(--f-display); font-size: 14px; padding: 2px 8px; transform: rotate(6deg); }
+.chap .meta { display: flex; gap: 12px; font-size: 12.5px; color: var(--muted); flex-wrap: wrap; }
+.chap .meta b { color: var(--fg); }
+
+/* 상점 */
+.shop { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 420px); gap: 16px; align-items: start; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.chip { background: var(--panel); border: 1px solid var(--line); color: var(--muted); padding: 6px 12px; font-size: 13.5px; cursor: pointer; }
+.chip.on { background: var(--lamp); color: #16120a; border-color: var(--lamp); font-weight: 600; }
+.glist { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+.gcard { text-align: left; background: var(--panel); border: 1px solid var(--line); padding: 10px 12px; cursor: pointer; display: grid; gap: 3px; min-width: 0; }
+.gcard:hover { border-color: rgba(242,193,78,.5); }
+.gcard.on { border-color: var(--lamp); background: var(--panel2); }
+.gcard .gn { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gcard .gs { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gcard .gp { font-family: var(--f-mono); font-size: 13px; color: var(--lamp); }
+.gcard .gp.own { color: var(--bio); }
+.detail { background: var(--panel); border: 1px solid var(--line); position: sticky; top: 110px; display: grid; gap: 12px; padding: 14px; min-width: 0; }
+.pvbox { height: 210px; background: radial-gradient(ellipse at 50% 60%, #2a2c32 0%, #121317 70%); position: relative; }
+.pvbox canvas { width: 100% !important; height: 100% !important; display: block; }
+.detail h2 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: 26px; line-height: 1.1; }
+.detail .sub { font-size: 12.5px; color: var(--muted); }
+.detail .note { margin: 0; font-size: 14px; line-height: 1.6; }
+.badges { display: flex; flex-wrap: wrap; gap: 5px; }
+.badge { font-size: 12px; border: 1px solid rgba(79,214,196,.45); color: var(--bio); padding: 2px 8px; }
+.stats { display: grid; grid-template-columns: 78px 1fr 52px; gap: 5px 10px; align-items: center; font-size: 12.5px; }
+.stats .b { height: 6px; background: rgba(255,255,255,.08); }
+.stats .b i { display: block; height: 100%; background: var(--lamp); }
+.stats .v { font-family: var(--f-mono); color: var(--muted); text-align: right; font-size: 11.5px; }
+.price { font-family: var(--f-mono); font-weight: 700; font-size: 20px; color: var(--lamp); }
+
+/* 개조 */
+.mods { display: grid; gap: 12px; }
+.mslot { display: grid; gap: 6px; }
+.mslot h4 { margin: 0; font-size: 13px; color: var(--muted); font-weight: 600; letter-spacing: .04em; }
+.mopts { display: flex; flex-wrap: wrap; gap: 6px; }
+.mopt { background: var(--panel2); border: 1px solid var(--line); padding: 6px 10px; font-size: 13px; cursor: pointer; display: grid; gap: 1px; text-align: left; }
+.mopt small { font-family: var(--f-mono); color: var(--lamp); font-size: 11.5px; }
+.mopt small.own { color: var(--bio); }
+.mopt.on { border-color: var(--lamp); box-shadow: inset 0 0 0 1px var(--lamp); }
+.mopt:disabled { opacity: .35; cursor: not-allowed; }
+
+/* 도감 */
+.journal { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 440px); gap: 16px; align-items: start; }
+.slist { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.scard { text-align: left; background: var(--panel); border: 1px solid var(--line); padding: 12px; cursor: pointer; display: grid; gap: 6px; }
+.scard.on { border-color: var(--bio); }
+.scard .sn { font-family: var(--f-display); font-size: 19px; }
+.scard .rb { height: 4px; background: rgba(255,255,255,.08); }
+.scard .rb i { display: block; height: 100%; background: var(--bio); }
+.facts { display: grid; gap: 8px; font-size: 14px; line-height: 1.6; }
+.facts dt { font-size: 12px; color: var(--bio); font-family: var(--f-mono); letter-spacing: .08em; }
+.facts dd { margin: 0; }
+.locked-txt { color: var(--muted); font-style: italic; }
+
+/* 일시정지 · 결과 */
+.modal { display: grid; place-items: center; background: rgba(5,5,7,.78); }
+.mcard { background: var(--panel); border: 1px solid var(--line); padding: 22px; display: grid; gap: 16px; width: min(460px, 100%); }
+.mcard h2 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: 34px; }
+.statrow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.statrow div { background: var(--panel2); padding: 10px; display: grid; gap: 2px; }
+.statrow b { font-family: var(--f-mono); font-size: 22px; }
+
+/* 신문 */
+#news { display: grid; place-items: center; background: rgba(5,5,7,.88); }
+.paper { background: var(--paper); color: var(--ink); width: min(760px, 100%); padding: clamp(16px, 4vw, 34px); display: grid; gap: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.6); animation: spin-in .8s cubic-bezier(.2,.8,.3,1) both; }
+@keyframes spin-in { from { transform: rotate(-200deg) scale(.1); opacity: 0; } to { transform: rotate(-1deg) scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .paper { animation: none; } }
+.mast { display: flex; justify-content: space-between; align-items: end; border-bottom: 3px double var(--ink); padding-bottom: 6px; gap: 10px; flex-wrap: wrap; }
+.mast .nm { font-family: var(--f-news); font-weight: 800; font-size: clamp(30px, 6vw, 46px); letter-spacing: .04em; }
+.mast .dt { font-family: var(--f-mono); font-size: 12px; }
+.headline { margin: 0; font-family: var(--f-news); font-weight: 800; font-size: clamp(24px, 4.6vw, 38px); line-height: 1.2; text-wrap: balance; }
+.subhead { margin: 0; font-family: var(--f-news); font-size: 17px; color: #4a4238; }
+.nbody { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 16px; }
+.nbody img { width: 100%; aspect-ratio: 4/3; object-fit: cover; background: #222; filter: grayscale(.85) contrast(1.15) sepia(.25); border: 1px solid var(--ink); }
+.nbody .cap { font-size: 12px; color: #5a5248; margin-top: 4px; }
+.article { font-family: var(--f-news); font-size: 15px; line-height: 1.75; columns: 1; }
+.article p { margin: 0 0 8px; }
+.reward { border-top: 1px solid var(--ink); padding-top: 8px; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; font-family: var(--f-mono); font-size: 14px; }
+.paper .btn { clip-path: none; background: var(--ink); color: var(--paper); }
+@media (max-width: 760px) { .shop, .journal { grid-template-columns: 1fr; } .detail { position: static; } .nbody { grid-template-columns: 1fr; } .obj { width: 56vw; } #minimap { width: 110px; height: 110px; } #money { top: calc(128px + env(safe-area-inset-top, 0px)); } #cashFeed { top: calc(148px + env(safe-area-inset-top, 0px)); } #ammoNum { font-size: 34px; } }
+
+#loading { display: grid; place-items: center; background: #000; font-family: var(--f-mono); color: var(--muted); letter-spacing: .2em; }
+#err { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; background: var(--bg); z-index: 50; }
+.sign { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(4px + env(safe-area-inset-bottom, 0px)); font-size: 11.5px; color: rgba(239,233,223,.5); pointer-events: none; z-index: 30; white-space: nowrap; }
+</style>
+
+<div id="game"></div>
+
+<div id="hud" hidden>
+  <div class="obj"><div id="objTitle"></div><ul id="objList"></ul><div class="objbar"><div id="objBar"></div></div></div>
+  <canvas id="minimap" width="150" height="150"></canvas>
+  <div id="money"></div>
+  <div id="cashFeed"></div>
+  <div id="toasts"></div>
+  <div id="bossBar" hidden><div class="nm" id="bossName">얼음왕</div><div class="bar"><div id="bossFill"></div></div></div>
+  <div id="nav" hidden><div id="navArrow"></div><div id="navDist"></div></div>
+  <div id="lens"></div>
+  <div id="grain"></div>
+  <div id="vig"></div>
+  <div id="cine"><div class="bar t"></div><div class="bar b"></div><div class="card"><div id="cineEye"></div><div id="cineTitle"></div><div id="cineSub"></div></div></div>
+  <div id="banner"><div id="bannerT"></div><div id="bannerS"></div></div>
+  <div id="scope" hidden><i></i><b>야간 투시 ON</b></div>
+  <div id="dmgdir"></div>
+  <div id="cross"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i><i class="d"></i></div>
+  <div id="hitmark"></div>
+  <div id="hold" hidden></div>
+  <div id="pops"></div>
+  <div id="prompt" hidden></div>
+  <div id="sub" hidden><div id="subWho"></div><div id="subText"></div></div>
+  <div id="feed"></div>
+  <div class="hpbox"><div class="row" style="gap:8px;align-items:baseline"><span class="lbl">체력</span><span id="hpNum">100</span></div><div class="hpbar"><div id="hpFill"></div></div></div>
+  <div class="ammobox"><div id="slots"></div><div id="reloadMsg"></div><div><span id="ammoNum">0</span><span id="ammoMax"></span></div><div id="gunName"></div><div id="fireMode"></div></div>
+</div>
+
+<div id="touch" hidden>
+  <div id="stick"><div id="knob"></div></div>
+  <button class="tbtn" id="tFire" type="button">발사</button>
+  <button class="tbtn" id="tAim" type="button">조준</button>
+  <button class="tbtn" id="tJump" type="button">점프</button>
+  <button class="tbtn" id="tReload" type="button">장전</button>
+  <button class="tbtn" id="tSwap" type="button">무기</button>
+  <button class="tbtn" id="tUse" type="button">E</button>
+  <button class="tbtn" id="tScan" type="button">스캔</button>
+  <button class="tbtn" id="tPause" type="button">II</button>
+</div>
+
+<div id="title" class="screen" hidden>
+  <div class="tcard">
+    <div class="eyebrow">2편 · 얼음 아래의 왕</div>
+    <h1>심연<br><span>탐사록 2</span></h1>
+    <p class="lead">여왕이 쓰러진 지 1년. 북쪽 설산의 눈 속에서 그 울음소리가 다시 들려온다. 얼음 밑에 잠든 왕을 찾아, 탐험가 서주원의 두 번째 탐사가 시작된다.</p>
+    <div class="row" id="titleBtns">
+      <button class="btn" id="btnContinue" type="button">이어하기</button>
+      <button class="btn ghost" id="btnNew" type="button">처음부터</button>
+    </div>
+    <div class="confirm" id="newConfirm" hidden>
+      <span>처음부터 하면 지금까지의 돈, 총, 조사 기록이 모두 지워져요.</span>
+      <div class="row"><button class="btn small" id="btnNewYes" type="button">새로 시작</button><button class="btn ghost" id="btnNewNo" type="button">취소</button></div>
+    </div>
+    <div class="set">
+      <label for="setSens">감도</label><input id="setSens" type="range" min=".3" max="2.5" step=".1"><span id="setSensV" class="mono"></span>
+      <label for="setVol">소리</label><input id="setVol" type="range" min="0" max="1" step=".05"><span id="setVolV" class="mono"></span>
+      <label for="setQ">그래픽</label><select id="setQ" style="background:var(--panel);color:var(--fg);border:1px solid var(--line);padding:4px"><option value="high">높음 (그림자)</option><option value="low">낮음 (빠름)</option></select><span class="mono" style="font-size:11px">새로고침 후 적용</span>
+    </div>
+    <p class="lead pc" style="font-size:13px">조작: WASD 이동 · 마우스 조준 · 왼쪽 클릭 발사 · 오른쪽 클릭 정조준 · R 장전 · E 샘플/보고 · F 스캔 · Shift 달리기 · 1/2/3 무기</p>
+  </div>
+</div>
+
+<div id="prologue" class="screen" hidden>
+  <div class="pro">
+    <div class="eyebrow">프롤로그</div>
+    <div id="proText"></div>
+    <div class="row" style="justify-content:center"><button class="btn" id="proNext" type="button">다음</button><button class="btn ghost" id="proSkip" type="button">건너뛰기</button></div>
+  </div>
+</div>
+
+<div id="hub" class="screen" hidden>
+  <div class="hubtop">
+    <div class="brand">심연 탐사록 2 <span class="lbl" style="margin-left:6px">입구 캠프</span></div>
+    <div class="wallet" id="wallet"></div>
+    <button class="btn ghost" id="hubTitle" type="button" style="padding:6px 12px;font-size:13px">처음 화면</button>
+    <nav class="tabs" id="tabs">
+      <button class="tab" data-tab="expedition" type="button">탐사</button>
+      <button class="tab" data-tab="shop" type="button">총기 상점</button>
+      <button class="tab" data-tab="mods" type="button">개조</button>
+      <button class="tab" data-tab="journal" type="button">괴물 도감</button>
+    </nav>
+  </div>
+  <div class="pane" id="pane"></div>
+</div>
+
+<div id="pause" class="screen modal" hidden>
+  <div class="mcard">
+    <div class="eyebrow">일시정지</div>
+    <h2>잠깐 쉬는 중</h2>
+    <div class="set">
+      <label for="pSens">감도</label><input id="pSens" type="range" min=".3" max="2.5" step=".1"><span id="pSensV" class="mono"></span>
+      <label for="pVol">소리</label><input id="pVol" type="range" min="0" max="1" step=".05"><span id="pVolV" class="mono"></span>
+    </div>
+    <div class="row"><button class="btn" id="btnResume" type="button">계속하기</button><button class="btn ghost" id="btnQuit" type="button">캠프로 돌아가기</button></div>
+    <p class="lead" style="font-size:13px">캠프로 돌아가도 번 돈과 조사 기록은 그대로 남아요.</p>
+  </div>
+</div>
+
+<div id="death" class="screen modal" hidden>
+  <div class="mcard">
+    <div class="eyebrow" style="color:var(--danger)">탐사 중단</div>
+    <h2>쓰러졌어요</h2>
+    <p class="lead">윤 박사가 구조대를 보내 캠프로 데려왔어요. 번 돈과 조사 기록은 그대로예요.</p>
+    <div class="statrow" id="deathStats"></div>
+    <div class="row"><button class="btn" id="btnDeathCamp" type="button">캠프로</button></div>
+  </div>
+</div>
+
+<div id="result" class="screen modal" hidden>
+  <div class="mcard">
+    <div class="eyebrow" id="resultEye">자유 사냥 결과</div>
+    <h2 id="resultHead">무사 귀환</h2>
+    <p id="resultMsg" style="margin:0;color:var(--muted);line-height:1.6"></p>
+    <div class="statrow" id="resultStats"></div>
+    <div class="row"><button class="btn" id="btnResultCamp" type="button">캠프로</button></div>
+  </div>
+</div>
+
+<div id="news" class="screen" hidden>
+  <article class="paper">
+    <div class="mast"><div class="nm">바깥세상 일보</div><div class="dt" id="newsDate"></div></div>
+    <h2 class="headline" id="newsHead"></h2>
+    <p class="subhead" id="newsSub"></p>
+    <div class="nbody">
+      <div><img id="newsImg" alt="조사된 괴생명체 사진"><div class="cap" id="newsCap"></div></div>
+      <div class="article" id="newsArticle"></div>
+    </div>
+    <div class="reward"><span id="newsReward"></span><button class="btn small" id="btnNewsOk" type="button">캠프로</button></div>
+  </article>
+</div>
+
+<div id="loading" class="screen" hidden>탐사 지역으로 가는 중…</div>
+<div id="err" hidden><p>3D 엔진을 불러오지 못했어요. 인터넷 연결을 확인하고 새로고침해 주세요.</p></div>
+<div class="sign">서주원이 만듬</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>if (!window.THREE) document.getElementById('err').hidden = false;</script>
+<script src="data.js"></script>
+<script src="guns2.js"></script>
+<script src="story2.js"></script>
+<script src="audio.js"></script>
+<script src="guns3d.js"></script>
+<script src="world.js"></script>
+<script src="creatures.js"></script>
+<script src="mission.js"></script>
+<script src="game.js"></script>
+<script src="ui.js"></script>
