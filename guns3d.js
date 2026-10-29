@@ -142,7 +142,7 @@ const GUNVIEW = (() => {
     const L = m.L || .2, big = k === 'deagle' ? 1.18 : 1, sh = .03 * big;
     const zR = .055, zF = -L + .055, yS = .042;
     const v = c.v;
-    c.box(b, .026 * big, .024, L * .8, M.frame, 0, .015, (zR + zF) / 2 + .015);
+    if (['luger', 'c96', 'ruger', 'beretta', 'deagle'].includes(k)) c.box(b, .026 * big, .024, L * .8, M.frame, 0, .015, (zR + zF) / 2 + .015);
     let slide;
     if (k === 'luger') {
       c.box(b, .026, .028, L * .42, M.body, 0, .04, zR - L * .21);
@@ -169,6 +169,8 @@ const GUNVIEW = (() => {
         c.box(slide, .007, sh * .75, L * .48, M.body, .0115, yS - .003, zF + L * .24);
         c.box(slide, .007, sh * .75, L * .48, M.body, -.0115, yS - .003, zF + L * .24);
         c.cyl(slide, .0085, L * .48, M.metal, 0, yS + .002, zF + L * .24);
+      } else if (k !== 'deagle') {
+        realPistol(c, { L, zR, zF, yS, sh, big, slide });
       } else {
         c.box(slide, .03 * big, sh, L, M.body, 0, yS, (zR + zF) / 2);
         if (k === 'deagle') c.box(slide, .02, .006, L * .9, M.body, 0, yS + sh / 2 + .003, (zR + zF) / 2);
@@ -187,10 +189,13 @@ const GUNVIEW = (() => {
     c.box(slide, .002, .002, .001, GLOW_G(), -.006, sTop + .005, zR - .0095);
     c.cyl(b, .0075 * big, .012, M.metal, 0, yS + .001, zF - .002);
     // 손잡이 · 방아쇠
-    c.box(b, .028 * big, .1, .046, M.furn, 0, -.046, .026, .22);
-    c.box(b, .026, .008, .02, M.frame, 0, .006, .056);
-    c.box(b, .006, .004, .048, M.frame, 0, -.012, -.026);
-    c.box(b, .006, .024, .005, M.frame, 0, -.001, -.05);
+    const realP = !['luger', 'c96', 'ruger', 'beretta', 'deagle'].includes(k);
+    if (!realP) {
+      c.box(b, .028 * big, .1, .046, M.furn, 0, -.046, .026, .22);
+      c.box(b, .026, .008, .02, M.frame, 0, .006, .056);
+      c.box(b, .006, .004, .048, M.frame, 0, -.012, -.026);
+      c.box(b, .006, .024, .005, M.frame, 0, -.001, -.05);
+    }
     c.box(b, .004, .016, .005, M.dark, 0, -.002, -.02);
     if (m.c === 'st' && k !== 'luger' && k !== 'ruger') { const h = c.part('hammer', 0, .045, zR + .003); c.box(h, .008, .016, .008, M.dark, 0, .006, .003); }
     if (m.fg) c.box(b, .012, .036, .012, M.dark, 0, -.018, -.075);
@@ -306,10 +311,12 @@ const GUNVIEW = (() => {
     const zr = bull ? .27 : trad ? .0 : .085, zf = zr - L;
     const by = H * .64, br = g.cat === 'lmg' ? .012 : g.cat === 'shotgun' ? .013 : S.big ? .016 : g.cat === 'sniper' ? .011 : .0095;
     const ak = S.k === 'ak';
+    const RA = realArch(g, S);
+    if (RA) realBody(c, RA, { S, L, B, H, W, zr, zf, by, g });
     // 몸통
-    if (trad) c.box(b, W * .96, .05, L + .02, M.furn, 0, .01, (zr + zf) / 2);
-    c.box(b, W, H, L, M.body, 0, H / 2 - .004, (zr + zf) / 2);
-    if (!trad && !bull) c.box(b, W * .9, H * .35, L * .55, M.body, 0, -.005, zf + L * .5);
+    if (RA) { /* 진짜 모양 */ } else if (trad) c.box(b, W * .96, .05, L + .02, M.furn, 0, .01, (zr + zf) / 2);
+    if (!RA) c.box(b, W, H, L, M.body, 0, H / 2 - .004, (zr + zf) / 2);
+    if (!RA && !trad && !bull) c.box(b, W * .9, H * .35, L * .55, M.body, 0, -.005, zf + L * .5);
     if (S.lever || S.k === 'lever') { /* 레버액션은 몸통 그대로 */ }
     // 배출구
     c.box(b, .002, H * .35, .05, M.dark, W / 2 + .001, H * .62, zf + L * .45);
@@ -319,7 +326,7 @@ const GUNVIEW = (() => {
       c.box(b, W, H * .8, .03, M.body, 0, H * .4, zf);
     } else c.cyl(b, br, B + .02, M.metal, 0, by, zf - B / 2);
     // 총몸 덮개
-    switch (S.h) {
+    switch (RA && !sd ? '' : S.h) {
       case 'round': c.cyl(b, .026, B * .55, M.furn, 0, by, zf - B * .28, 14); break;
       case 'rail': c.box(b, W * 1.05, .055, B * .6, M.body, 0, by - .004, zf - B * .3); c.box(b, W * .42, .007, B * .58, M.dark, 0, by + .027, zf - B * .3); break;
       case 'box': c.box(b, W, .05, B * .55, M.furn, 0, by - .006, zf - B * .28); break;
@@ -334,14 +341,16 @@ const GUNVIEW = (() => {
       const tubes = S.tubes || 1;
       for (let i = 0; i < tubes; i++) c.cyl(b, .011, B * .85, M.metal, tubes > 1 ? (i ? .012 : -.012) : 0, by - .028, zf - B * .43);
     }
-    if (g.mode === 'pump') { const pp = c.part('pump', 0, by - .03, zf - .12); c.box(pp, W * .92, .046, .15, M.furn, 0, 0, 0); for (let i = 0; i < 5; i++) c.box(pp, W * .95, .04, .004, M.dark, 0, 0, -.06 + i * .03); }
+    if (g.mode === 'pump') { const pp = c.part('pump', 0, by - .03, zf - .12); if (RA) realPump(c, pp, W, M.furn); else { c.box(pp, W * .92, .046, .15, M.furn, 0, 0, 0); for (let i = 0; i < 5; i++) c.box(pp, W * .95, .04, .004, M.dark, 0, 0, -.06 + i * .03); } }
     // 손잡이 · 방아쇠
-    if (!trad) c.box(b, .03, .095, .045, M.furn, 0, -.05, .022, .3);
-    c.box(b, .006, .004, .05, M.dark, 0, -.015, -.02);
-    c.box(b, .006, .024, .005, M.dark, 0, -.004, -.045);
+    if (!RA) {
+      if (!trad) c.box(b, .03, .095, .045, M.furn, 0, -.05, .022, .3);
+      c.box(b, .006, .004, .05, M.dark, 0, -.015, -.02);
+      c.box(b, .006, .024, .005, M.dark, 0, -.004, -.045);
+    }
     c.box(b, .004, .016, .005, M.dark, 0, -.005, -.015);
     // 개머리판
-    const stk = trad ? 'trad' : bull ? 'none' : S.st;
+    const stk = RA ? 'none' : trad ? 'trad' : bull ? 'none' : S.st;
     switch (stk) {
       case 'fixed': c.cyl(b, .016, .2, M.dark, 0, .028, zr + .1); c.box(b, W * .85, .06, .17, M.furn, 0, .016, zr + .13); c.box(b, W, .12, .025, M.furn, 0, .0, zr + .22); break;
       case 'fold': c.cyl(b, .005, .22, M.dark, .013, .03, zr + .11); c.cyl(b, .005, .22, M.dark, -.013, .03, zr + .11); c.cyl(b, .005, .2, M.dark, 0, -.025, zr + .1); c.box(b, W * .8, .1, .012, M.dark, 0, .0, zr + .22); break;
@@ -350,15 +359,18 @@ const GUNVIEW = (() => {
       case 'trad': c.box(b, W * .92, .055, .34, M.furn, 0, -.02, zr + .16, -.1); c.box(b, W * .95, .12, .03, M.furn, 0, -.05, zr + .33); break;
       case 'thumb': c.box(b, W * .8, .03, .28, M.furn, 0, .035, zr + .14); c.box(b, W * .85, .05, .22, M.furn, 0, -.035, zr + .16); c.box(b, W * .9, .13, .03, M.furn, 0, 0, zr + .28); break;
     }
-    if (bull) { c.box(b, W, .12, .03, M.furn, 0, .0, zr + .01); c.box(b, W * .95, .04, L * .45, M.body, 0, -.02, zr - L * .23); }
+    if (bull && !RA) { c.box(b, W, .12, .03, M.furn, 0, .0, zr + .01); c.box(b, W * .95, .04, L * .45, M.body, 0, -.02, zr - L * .23); }
     // 탄창
     const mt = S.mg, ml = magLen(g, mods);
     const zmw = bull ? zr - .07 : ak ? zf + L * .36 : zf + L * .3;
     const magM = S.clear ? BASE.clear() : (S.c === 'wood' && mt === 'drum' ? BASE.steel() : M.dark);
     let mgp = null;
     v.magDir = new V3(0, -1, 0);
-    if (mt === 'straight' || mt === 'curved' || mt === 'curvedL' || mt === 'curvedS') {
-      mgp = c.part('mag', 0, 0, zmw);
+    if (RA && realMag(c, RA, mgp = c.part('mag', 0, 0, zmw), ml, W, magM, mt, g)) {
+      const kk = RA === 'ak' ? (mt === 'straight' ? .05 : .34) : .15;
+      v.magHold = new V3(0, -ml * .7, zmw - kk * ml * .5);
+    } else if (mt === 'straight' || mt === 'curved' || mt === 'curvedL' || mt === 'curvedS') {
+      if (!mgp) mgp = c.part('mag', 0, 0, zmw);
       const segs = mt === 'straight' ? 1 : 4, bend = mt === 'curvedS' ? .06 : mt === 'curvedL' ? .09 : .13;
       let y = 0, z = 0, a = .05;
       for (let i = 0; i < segs; i++) {
@@ -693,6 +705,404 @@ const GUNVIEW = (() => {
     v.cylPos = new V3(0, .02, -.05); v.cylOpenPos = new V3(-.05, .03, -.05); v.magHold = v.cylPos.clone(); v.magPos = v.cylPos.clone();
   }
 
+  // =================================================================
+  //  진짜 총처럼: 실제 총의 옆모습 윤곽선을 그대로 뽑아(압출) 만든 부품들
+  //  좌표는 [z, y] (z가 작을수록 총구 쪽). 두께 w만큼 좌우로 뽑는다
+  // =================================================================
+  const extCache = {};
+  function extG(pts, w, holes, bev) {
+    const key = JSON.stringify([pts, w, holes || 0, bev === undefined ? -1 : bev]);
+    if (extCache[key]) return extCache[key];
+    const sh = new THREE.Shape(); pts.forEach(([z, y], i) => i ? sh.lineTo(-z, y) : sh.moveTo(-z, y));
+    (holes || []).forEach(hp => { const p = new THREE.Path(); hp.forEach(([z, y], i) => i ? p.lineTo(-z, y) : p.moveTo(-z, y)); sh.holes.push(p); });
+    const bv = bev === undefined ? Math.min(.0016, w * .16) : bev, d = Math.max(.0004, w - bv * 2);
+    const g = new THREE.ExtrudeGeometry(sh, { depth: d, bevelEnabled: bv > 0, bevelThickness: bv, bevelSize: bv, bevelSegments: 1, steps: 1, curveSegments: 4 });
+    g.translate(0, 0, -d / 2); g.rotateY(PI / 2);
+    return extCache[key] = g;
+  }
+  Ctx.prototype.ext = function (p, pts, w, m, x, holes, bev) { const o = new THREE.Mesh(extG(pts, w, holes, bev), m); o.position.x = x || 0; p.add(o); return o; };
+  const R5 = v => Math.round(v * 1e5) / 1e5;
+  const mv = (pts, dz, dy) => pts.map(([z, y]) => [R5(z + dz), R5(y + dy)]);
+  // 둥근 모서리용 호
+  const arc = (cz, cy, r, a0, a1, n) => { const o = []; for (let i = 0; i <= n; i++) { const a = a0 + (a1 - a0) * i / n; o.push([R5(cz + Math.cos(a) * r), R5(cy + Math.sin(a) * r)]); } return o; };
+
+  // 피카티니 레일: 바탕 위로 이가 줄지어 솟아 있다. side: 'top' | 'l' | 'r' | 'bot'
+  function rail(c, p, z0, z1, x, y, side, m) {
+    const L = z0 - z1, zc = (z0 + z1) / 2, w = .021;
+    const T = side === 'top' || side === 'bot', s = side === 'bot' || side === 'l' ? -1 : 1;
+    if (T) c.box(p, w * .75, .005, L, m, x, y + s * .0025, zc); else c.box(p, .005, w * .75, L, m, x + s * .0025, y, zc);
+    for (let z = z1 + .004; z < z0 - .002; z += .01) {
+      if (T) c.box(p, w, .004, .0052, m, x, y + s * .007, z); else c.box(p, .004, w, .0052, m, x + s * .007, y, z);
+    }
+  }
+  // 방아쇠울 (가운데가 뚫린 고리)
+  function tguard(c, p, z0, y0, m, sq) {
+    const o = [[z0 - .058, y0 + .002], [z0 - .058, y0 - (sq ? .026 : .018)], [z0 - (sq ? .055 : .05), y0 - .028], [z0 + .004, y0 - .028], [z0 + .004, y0 + .002]];
+    const h = [[z0 - .052, y0 - .001], [z0 - .052, y0 - (sq ? .021 : .016)], [z0 - (sq ? .05 : .046), y0 - .022], [z0 - .003, y0 - .022], [z0 - .003, y0 - .001]];
+    c.ext(p, o, .007, m, 0, [h]);
+  }
+  // 권총 손잡이 (소총용). 원점 = 몸통 밑 앞쪽
+  const GRIPS = {
+    a2: [[-.013, 0], [-.008, -.026], [-.014, -.04], [-.006, -.052], [.003, -.086], [.012, -.099], [.044, -.094], [.034, -.05], [.03, -.012], [.032, 0]],
+    ak: [[-.008, 0], [.004, -.07], [.008, -.092], [.03, -.096], [.032, -.07], [.026, 0]],
+    hk: [[-.012, 0], [-.004, -.03], [-.01, -.045], [.002, -.09], [.014, -.1], [.044, -.095], [.034, -.04], [.034, 0]],
+    wood: [[-.006, 0], [.006, -.08], [.016, -.094], [.04, -.088], [.03, -.02], [.03, 0]],
+    mod: [[-.012, 0], [-.006, -.028], [-.012, -.042], [-.004, -.056], [.006, -.088], [.016, -.1], [.046, -.093], [.038, -.05], [.035, -.012], [.036, 0]],
+  };
+  function pgrip(c, p, z, y, kind, m, w) { c.ext(p, mv(GRIPS[kind] || GRIPS.a2, z, y), w || .029, m); }
+
+  // 탄창 윤곽: 위에서 아래로 내려가며 앞으로 휘어진다. d = 앞뒤 폭, k = 휘는 정도
+  function magShape(ml, d, k, plate, lug) {
+    const n = 6, front = [], back = [];
+    for (let i = 0; i <= n; i++) { const t = i / n, y = -t * ml, cz = -k * ml * t * t; front.push([R5(cz - d / 2), R5(y)]); back.push([R5(cz + d / 2), R5(y)]); }
+    const bz = -k * ml, by = -ml;
+    const pts = [[d / 2, .004]].concat(lug ? [[-d / 2 - .006, .004], [-d / 2 - .006, -.01]] : [[-d / 2, .004]]).concat(front.slice(1));
+    if (plate) pts.push([R5(bz - d / 2 - .004), R5(by)], [R5(bz - d / 2 - .004), R5(by - .008)], [R5(bz + d / 2 + .004), R5(by - .008)], [R5(bz + d / 2 + .004), R5(by)]);
+    return pts.concat(back.reverse().slice(0, -1));
+  }
+  function realMag(c, RA, mgp, ml, W, m, mt, g) {
+    if (mt !== 'curved' && mt !== 'straight' && mt !== 'curvedL' && mt !== 'curvedS') return false;
+    let d = .056, k = mt === 'straight' ? .02 : mt === 'curvedS' ? .1 : mt === 'curvedL' ? .16 : .2, lug = false, rib = 0, w = W * .55;
+    if (RA === 'ak') { d = .062; k = mt === 'straight' ? .05 : .34; lug = true; rib = 1; }
+    else if (RA === 'ar' || RA === 'mod' || RA === 'pup') { d = .058; k = mt === 'straight' ? .02 : .13; rib = 2; w = .024; }
+    else if (RA === 'hk') { if (g.cat === 'smg') { d = .036; k = .3; w = .022; } else { d = .062; k = .08; } rib = 2; }
+    else if (RA === 'box' || RA === 'tube') { d = .034; k = .0; w = .022; }
+    const pts = magShape(ml, d, k, true, lug);
+    c.ext(mgp, pts, w, m);
+    // 탄창 옆면의 홈 (보강 갈비뼈)
+    if (rib) for (let i = 1; i <= 3; i++) {
+      const t = i / 4.2, y = -t * ml, cz = -k * ml * t * t;
+      c.box(mgp, w + .003, .004, d * .82, m, 0, y, cz, -2 * k * t * .9);
+    }
+    // 맨 위의 탄 (보이는 곳)
+    if (g.cat !== 'shotgun') { const r = roundMesh('brass'); r.position.set(0, .006, .004); r.scale.setScalar(.9); mgp.add(r); }
+    return true;
+  }
+
+  // 총이 어느 집안인지 (모양 고르기)
+  function realArch(g, S) {
+    const id = g.id, k = g.m.k;
+    if (['p90', 'vector', 'g11', 'minigun', 'rpg', 'm79', 'mgl', 'double', 'tommy'].includes(k)) return null;
+    if (S.bull) return 'pup';
+    const has = re => re.test(id);
+    if (g.cat === 'shotgun') return k === 'ak' ? 'ak' : has(/^(aa12|usas12|striker|jackhammer|dp12|srm1216|neostead|uts15|mag7|spas15|ksg|ks7|streetsweeper|typhoonf12|mka1919)$/) ? 'mod' : 'shot';
+    if (has(/^(svd|svdk|svds|psl|m76|m91rs|svch|galatz)$/)) return 'svd';
+    if (k === 'ak' || has(/^(vz58|insas|excalibur|type63|t65)$/)) return 'ak';
+    if (has(/^(mp5|mp5sd|mp5k|mp510|g3|g3sg1|hk33|hk53|hk21|psg1|msg90|ak4|cetmel|g41|ameli)$/)) return 'hk';
+    if (has(/^(m16a1|m16a2|m16a4|m4a1|commando|hk416|k2|k2c1|k2a|k1a|stc16|c7|c8|mcx|xm7|sr16|sig516|ar556|mp15|lwrcm6|rec7|sp1|car15|m27|mk18|saint|lr300|stm556|xk8|t86|t91|ss2|ar10|sr25|hk417|l129a1|mk12|m110|mk11|g28|sig716|m39emr|xcr|arad|ar18|ss1|fnc|sar80|sr88|mk16)$/)) return 'ar';
+    if (g.cat === 'sniper') {
+      if (has(/^(m82|as50|barrettm95|hecate2|osv96|asvk|ntw20|hs50|m93ba|gepard|vks|lahti39|ptrd41|ptrs41|boys|ax50|m200|vidhwansak)$/)) return 'amr';
+      if (has(/^(awm|l96|axmc|mrad|msr|m2010|tac50|tac338|dsr1|dsr50|sv98|t5000|dvl10|ultimaratio|frf2|ssg3000|sv99|trg42|trg22|k14)$/)) return 'tac';
+      if (has(/^(r700|m24|m40|win70|t3|cz550|markv|scout|sp66|ssg69|r93|r1022)$/)) return 'sport';
+      return 'wood';
+    }
+    if (g.cat === 'lmg') {
+      if (k === 'ak') return 'ak';
+      if (has(/^(m249|m60|pkm|pecheneg|m240|mg42|mg34|mg3|mg4|mg5|negev|negevng7|k3|k12|k15|mk43|mk48|fnmag|rpl20|m1919|qjy88|rp46|sg43|type99lmg|ultimax)$/)) return 'belt';
+      return 'wood';
+    }
+    if (g.cat === 'br') {
+      if (has(/^(scarh|scar20s|tavor7|qbu191|rfb|mk14)$/)) return 'mod';
+      if (has(/^(fal|l1a1)$/)) return 'fal';
+      return 'wood';
+    }
+    if (g.cat === 'smg') {
+      if (k === 'uzi' || k === 'mac') return 'box';
+      if (has(/^(mp40|sten|stenmk5|stenmk2s|sterling|m3|mat49|owen|austen|lanchester|mp3008|f1smg|cgm45|m56|madsen50|type100|pps43)$/)) return 'tube';
+      if (has(/^(ppsh|ppd40|suomi|thompson|m1a1t|mp18|mp28|mp34|mp35|emp35|m38a|b1918|reising|kiraly|orita|mas38|fnab43|tz45|lf57|hovea|labora|mors|m12|vigneron|z62|hotchkissU|fbp48|ud42|sw76|type79|lusa|sub2000|cx4)$/)) return 'wood';
+      return 'mod';
+    }
+    if (g.cat === 'ar') {
+      if (has(/^(stg44|stg45|mkb42|vg15|fedorov|mini14|sks|em2)$/)) return 'wood';
+      return 'mod';
+    }
+    return null;
+  }
+
+  // ---------- 집안별 몸통 · 총열 덮개 · 손잡이 · 개머리판 ----------
+  function realBody(c, RA, X) {
+    const { S, L, B, H, W, zr, zf, by, g } = X, M = c.M, b = c.body, id = g.id, dk = M.dark, met = M.metal;
+    const flatTop = !S.carry;
+    const stockOf = () => S.st;
+    if (RA === 'ar') {
+      // 아래 몸통: 탄창 들어가는 곳이 아래로 벌어지고, 방아쇠울이 붙어 있다
+      const zm = zf + L * .3;
+      c.ext(b, [[zr, H * .45], [zr, H * .05], [zr - .02, -.006], [zm + .03, -.006], [zm + .033, -.022], [zm - .033, -.022], [zm - .036, -.002], [zf + .02, H * .1], [zf + .02, H * .45]], W * .96, M.body);
+      tguard(c, b, .002, -.004, M.body, true);
+      // 위 몸통 + 전진 보조 장치 + 탄피 막이
+      c.ext(b, [[zr + .004, H * .45], [zr + .004, H * .96], [zf, H * .96], [zf, H * .45]], W * .9, M.body);
+      c.cyl(b, .007, .04, M.body, W * .45, H * .72, zr - .03).rotation.x = .25;
+      c.ext(b, [[zr - .05, H * .55], [zr - .045, H * .92], [zr - .062, H * .92], [zr - .066, H * .7]], .008, M.body, W * .5);
+      c.box(b, .002, H * .26, .06, dk, W * .46, H * .64, zf + L * .48);
+      if (flatTop) rail(c, b, zr, zf - .005, 0, H * .96, 'top', dk);
+      // 총열 덮개: 옛 M16은 둥근 홈 덮개, 요즘 것은 레일 덮개
+      const old = /^(m16a1|m16a2|c7|sp1|car15|commando|t65|t86|ar18|k2|k1a)$/.test(id), slim = /^(mcx|xm7|mp15|ar556|sig516|saint|lwrcm6|m27|m110|g28|sig716|ar10|sr25|hk417|l129a1|mk11|m39emr|xk8|stc16|arad|mk16)$/.test(id);
+      const hl = Math.min(B * .62, .34), hz = zf - hl / 2;
+      if (old) {
+        c.cyl(b, .025, hl, M.furn, 0, by, hz, 14, .028);
+        for (let i = 0; i < 10; i++) { const a = i / 10 * PI * 2; c.box(b, .004, .004, hl * .9, dk, Math.cos(a) * .026, by + Math.sin(a) * .026, hz); }
+        c.cyl(b, .03, .012, M.body, 0, by, zf - .004, 14);
+      } else if (slim) {
+        c.ext(b, [[zf, by + .028], [zf - hl, by + .026], [zf - hl, by - .026], [zf, by - .03]], .052, M.body);
+        for (let i = 0; i < 5; i++) c.box(b, .054, .009, .022, dk, 0, by - .004, zf - .04 - i * hl * .18);
+        rail(c, b, zf, zf - hl, 0, by + .028, 'top', dk);
+      } else {
+        c.box(b, .05, .052, hl, M.body, 0, by, hz);
+        rail(c, b, zf, zf - hl, 0, by + .026, 'top', dk); rail(c, b, zf, zf - hl, 0, by - .026, 'bot', dk);
+        rail(c, b, zf, zf - hl, .025, by, 'r', dk); rail(c, b, zf, zf - hl, -.025, by, 'l', dk);
+      }
+      // A자 가늠쇠 + 가스 블록 (레일 덮개가 긴 요즘 총은 접이식 가늠쇠)
+      const zs = zf - Math.min(B * .72, hl + .04);
+      if (!slim || old) {
+        c.ext(b, [[zs + .014, by - .013], [zs + .005, by + .055], [zs - .005, by + .055], [zs - .016, by - .013], [zs - .012, by - .03], [zs + .01, by - .03]], .014, M.body);
+        c.box(b, .004, .02, .004, dk, 0, by + .065, zs);
+      }
+      pgrip(c, b, .006, -.004, slim ? 'mod' : 'a2', M.furn);
+      // 개머리판: 버퍼관 + 접이/고정
+      const fixed = stockOf() === 'fixed' && /^(m16a1|m16a2|m16a4|c7|sp1|ar10|sr25|m110|mk12|t65|t91|ss1)$/.test(id);
+      c.cyl(b, .015, .2, M.body, 0, H * .66, zr + .1, 14);
+      if (fixed) c.ext(b, [[zr, H * .95], [zr + .25, H * .98], [zr + .26, H * .98], [zr + .26, -.07], [zr + .24, -.07], [zr + .04, -.006], [zr, H * .1]], W * .88, M.furn);
+      else if (stockOf() !== 'none') c.ext(b, [[zr + .12, H * 1.02], [zr + .23, H * 1.05], [zr + .245, H * 1.05], [zr + .245, -.062], [zr + .225, -.062], [zr + .19, H * .1], [zr + .12, H * .28]], W * .9, M.furn);
+      return;
+    }
+    if (RA === 'ak') {
+      // 찍어 만든 몸통 + 둥근 덮개 + 앞쪽 가늠자 받침
+      c.ext(b, [[zr, H * .1], [zr, H * .72], [zr - .01, H * .8], [zf + .07, H * .8], [zf + .07, H * .86], [zf + .015, H * .9], [zf, H * .84], [zf, -.004], [zf + .06, -.004], [zf + .062, -.012], [zf + .11, -.012], [zf + .112, -.004], [zr - .03, -.004], [zr - .045, H * .1]], W * .92, M.body);
+      c.ext(b, [[zr - .002, H * .72], ...arc(zr - .02, H * .72, .018, 0, PI / 2, 3), [zf + .075, H * .9], [zf + .075, H * .72]], W * .8, M.body);
+      c.box(b, .006, .004, .03, met, W * .46, H * .5, zr - .04);
+      c.box(b, .003, .014, .05, met, W * .48, H * .4, zr - .06, -.2);
+      // 위 · 아래 총열 덮개와 가스관
+      const fe = Math.min(.19, B * .55), wood = M.furn;
+      c.ext(b, [[zf, by - .006], [zf - .01, by + .006], [zf - fe, by + .006], [zf - fe - .004, by - .012], [zf - fe + .01, by - .036], [zf - .02, by - .04], [zf, by - .034]], W * .96, wood);
+      for (let i = 0; i < 3; i++) c.box(b, W * .99, .003, fe * .7, dk, 0, by - .016 - i * .007, zf - fe * .5);
+      c.cyl(b, .0075, B * .42, met, 0, by + .02, zf - B * .25);
+      c.ext(b, [[zf - .005, by + .012], [zf - .012, by + .032], [zf - fe * .75, by + .032], [zf - fe * .8, by + .012]], .03, wood);
+      const zg = zf - B * .46, zs = zf - B + .03;
+      c.ext(b, [[zg + .012, by - .012], [zg + .012, by + .03], [zg - .02, by + .03], [zg - .02, by - .012]], .02, met);
+      c.ext(b, [[zs + .016, by - .01], [zs + .008, by + .045], [zs - .004, by + .045], [zs - .01, by - .01]], .014, met);
+      // AKM은 비스듬한 총구 덮개, AK-74 계열은 큰 총구 제퇴기
+      if (/74|105|12|15|19|545|a545|9$/.test(id) || /^(ak74|ak74m|aks74u|ak12|ak15|ak105|an94)$/.test(id)) c.cyl(b, .012, .05, met, 0, by, zf - B - .02, 12);
+      else c.ext(b, [[zf - B + .002, by - .01], [zf - B + .002, by + .01], [zf - B - .022, by + .01], [zf - B - .018, by - .01]], .02, met);
+      pgrip(c, b, .008, -.004, 'ak', M.furn);
+      tguard(c, b, .004, -.004, met, false);
+      const st = stockOf(), modern = /^(ak12|ak15|ak19|ak203|a545|ak308|ak9|vityaz|beryl|grot|rk95|arm1|galilace|tantal|m21|m85)$/.test(id);
+      if (st === 'wood' || st === 'fixed' || /^(ak47|akm|type56|ak74|ak101|ak103|rk62|m70|amd65|pm63r|ak63|r4|galil|svd)$/.test(id) && st !== 'fold') {
+        c.ext(b, [[zr, H * .78], [zr + .25, H * .38], [zr + .26, H * .38], [zr + .26, -.085], [zr + .245, -.086], [zr + .07, -.032], [zr, -.002]], W * .86, M.furn);
+        c.box(b, W * .88, .12, .006, met, 0, H * .38 - .061, zr + .262);
+      } else if (modern) {
+        c.cyl(b, .014, .2, dk, 0, H * .6, zr + .1, 12);
+        c.ext(b, [[zr + .08, H * 1.05], [zr + .21, H * 1.08], [zr + .23, H * 1.08], [zr + .23, -.065], [zr + .205, -.065], [zr + .17, H * .1], [zr + .08, H * .25]], W * .9, M.furn);
+      } else {
+        // 옆으로 접는 세모 개머리판
+        c.ext(b, [[zr, H * .75], [zr + .24, H * .6], [zr + .245, H * .6], [zr + .245, -.07], [zr + .22, -.07], [zr, H * .05]], .012, M.furn, 0, [[[zr + .02, H * .55], [zr + .215, H * .48], [zr + .215, -.052], [zr + .03, H * .12]]]);
+      }
+      return;
+    }
+    if (RA === 'svd') {
+      c.ext(b, [[zr, H * .1], [zr, H * .75], [zf + .02, H * .82], [zf, H * .8], [zf, -.004], [zr, -.004]], W * .92, M.body);
+      const fe = Math.min(.22, B * .45);
+      c.ext(b, [[zf, by - .03], [zf, by + .03], [zf - fe, by + .027], [zf - fe, by - .027]], .05, M.furn);
+      for (let i = 0; i < 4; i++) c.box(b, .052, .008, .02, dk, 0, by, zf - .04 - i * fe * .22);
+      c.ext(b, [[zf - B * .5 + .01, by - .012], [zf - B * .5 + .01, by + .028], [zf - B * .5 - .016, by + .028], [zf - B * .5 - .016, by - .012]], .02, met);
+      c.cyl(b, .012, .07, met, 0, by, zf - B - .03, 12);
+      // 엄지 구멍이 뚫린 뼈대 개머리판
+      c.ext(b, [[zr, H * .85], [zr + .3, H * .7], [zr + .31, H * .7], [zr + .31, -.09], [zr + .29, -.09], [zr + .09, -.03], [zr + .03, -.1], [zr, -.098], [zr - .01, -.005]], W * .8, M.furn, 0,
+        [[[zr + .04, H * .6], [zr + .28, H * .5], [zr + .28, H * .05], [zr + .1, H * .05], [zr + .04, -.02]], [[zr + .01, -.02], [zr + .055, -.03], [zr + .04, -.08], [zr + .012, -.08]]]);
+      tguard(c, b, .004, -.004, met, false);
+      return;
+    }
+    if (RA === 'hk') {
+      const smg = g.cat === 'smg';
+      // 길쭉하게 눌러 만든 몸통 + 총열 위 장전 손잡이 관 + 둥근 가늠쇠 덮개
+      c.ext(b, [[zr, H * .15], [zr, H * .88], [zr - .015, H * .98], [zf, H * .98], [zf, H * .05], [zf + L * .2, -.004], [zr - .02, -.004]], W * .9, M.body);
+      c.box(b, W * .94, .004, L * .7, dk, 0, H * .55, (zr + zf) / 2);
+      const tz = zf - Math.min(B * .8, smg ? .11 : .3), tl = zf - tz;
+      c.cyl(b, .0105, tl + .01, M.body, 0, by + .026, zf - tl / 2, 12);
+      const fr = new THREE.Mesh(new THREE.TorusGeometry(.013, .003, 6, 16), M.body); fr.position.set(0, by + .046, tz + .006); b.add(fr);
+      c.box(b, .003, .016, .004, dk, 0, by + .044, tz + .006);
+      c.cyl(b, .016, .012, M.body, 0, by + .022, tz + .006, 14);
+      const drum = new THREE.Mesh(cylG(.013, .013, .016, 12), M.body); drum.rotation.z = PI / 2; drum.position.set(0, H + .012, zr - .02); b.add(drum);
+      // 총열 덮개: MP5는 가는 것, G3는 넓은 것
+      const fl = smg ? .11 : Math.min(.2, B * .55);
+      if (g.id !== 'mp5sd') c.ext(b, [[zf, by + .018], [zf - fl, by + .016], [zf - fl - .006, by - .01], [zf - fl, by - .03], [zf - .02, by - .036], [zf, by - .03]], smg ? .046 : .056, M.furn);
+      for (let i = 0; i < 4 && g.id !== 'mp5sd'; i++) c.box(b, smg ? .048 : .058, .006, .006, dk, 0, by - .01, zf - .02 - i * fl * .24);
+      // 방아쇠 뭉치 (비스듬한 손잡이와 한 덩어리)
+      c.ext(b, [[.03, -.004], [-.065, -.004], [-.065, -.03], [-.012, -.03], [-.012, -.004]], .03, M.furn, 0, [[[-.058, -.008], [-.058, -.024], [-.016, -.024], [-.016, -.008]]]);
+      pgrip(c, b, .004, -.004, 'hk', M.furn);
+      if (g.id === 'mp5k') { c.box(b, .024, .07, .028, M.furn, 0, by - .07, zf - .03); return; }
+      const st = stockOf();
+      if (/^(mp5|mp5sd|mp510|hk53)$/.test(g.id) || st === 'fold' && !smg) {
+        c.cyl(b, .005, .22, dk, .014, H * .6, zr + .11); c.cyl(b, .005, .22, dk, -.014, H * .6, zr + .11);
+        c.ext(b, [[zr + .2, H * .9], [zr + .222, H * .9], [zr + .222, -.06], [zr + .2, -.06]], W * .9, M.furn);
+      } else c.ext(b, [[zr, H * .9], [zr + .07, H * .95], [zr + .26, H * .92], [zr + .27, H * .92], [zr + .27, -.07], [zr + .25, -.07], [zr + .06, -.012], [zr, H * .05]], W * .92, M.furn);
+      return;
+    }
+    if (RA === 'fal') {
+      c.ext(b, [[zr, H * .1], [zr, H * .95], [zf + .04, H * 1.02], [zf, H * .9], [zf, -.004], [zf + L * .35, -.016], [zf + L * .55, -.016], [zr - .02, -.004]], W * .94, M.body);
+      c.ext(b, [[zr - .12, H * .95], [zr - .1, H * 1.5], [zf + .08, H * 1.5], [zf + .06, H * .95]], .008, M.dark, 0, [[[zr - .115, H * 1.05], [zr - .11, H * 1.38], [zf + .085, H * 1.38], [zf + .075, H * 1.05]]]);
+      const fe = Math.min(.24, B * .55);
+      c.ext(b, [[zf, by - .034], [zf, by + .022], [zf - fe, by + .02], [zf - fe - .006, by - .02], [zf - fe + .01, by - .036]], W * .98, M.furn);
+      for (let i = 0; i < 6; i++) c.box(b, W, .012, .004, dk, 0, by + .004, zf - .03 - i * fe * .14);
+      c.ext(b, [[zf - fe - .01, by - .012], [zf - fe - .01, by + .03], [zf - fe - .04, by + .03], [zf - fe - .04, by - .012]], .022, M.metal);
+      c.cyl(b, .013, .06, M.metal, 0, by, zf - B - .02, 10);
+      pgrip(c, b, .006, -.004, 'mod', M.furn); tguard(c, b, .002, -.004, M.metal, true);
+      c.ext(b, [[zr, H * .9], [zr + .26, H * .8], [zr + .27, H * .8], [zr + .27, -.085], [zr + .25, -.086], [zr + .06, -.02], [zr, H * .05]], W * .88, M.furn);
+      return;
+    }
+    if (RA === 'mod') {
+      // 요즘 총: 위는 레일이 끝까지 이어진 통짜, 아래는 플라스틱
+      const hl = Math.min(B * .6, .3), shot = g.cat === 'shotgun';
+      c.ext(b, [[zr, H * .48], [zr, H * .98], [zf - hl, H * .98], [zf - hl, by - .028], [zf, by - .032], [zf, H * .48]], W * .98, M.body);
+      for (let i = 0; i < 4; i++) c.box(b, W * 1.02, .01, .024, M.dark, 0, by - .006, zf - .03 - i * hl * .24);
+      rail(c, b, zr, zf - hl, 0, H * .98, 'top', M.dark);
+      rail(c, b, zf - .02, zf - hl + .01, W * .5, by - .008, 'r', M.dark); rail(c, b, zf - .02, zf - hl + .01, -W * .5, by - .008, 'l', M.dark);
+      const zm = zf + L * .3;
+      c.ext(b, [[zr - .01, H * .5], [zr - .01, H * .1], [zr - .04, -.006], [zm + .032, -.006], [zm + .034, -.02], [zm - .034, -.02], [zm - .037, -.002], [zf + .02, H * .15], [zf + .02, H * .5]], W * .94, M.furn);
+      tguard(c, b, .002, -.004, M.furn, true);
+      pgrip(c, b, .006, -.004, 'mod', M.furn);
+      if (g.x.zoom && g.x.zoom < 3) c.ext(b, [[zr - .03, H * .98], [zr - .04, H * 1.6], [zf + .05, H * 1.6], [zf + .03, H * .98]], .018, M.body, 0, [[[zr - .05, H * 1.05], [zr - .055, H * 1.45], [zf + .07, H * 1.45], [zf + .06, H * 1.05]]]);
+      // 옆으로 접는 개머리판 (뺨 받침 + 구멍)
+      if (S.st !== 'none') c.ext(b, [[zr, H * .95], [zr + .23, H * 1.02], [zr + .25, H * 1.02], [zr + .25, -.066], [zr + .225, -.066], [zr + .14, H * .05], [zr, H * .1]], W * .82, M.furn, 0, [[[zr + .03, H * .75], [zr + .19, H * .78], [zr + .2, H * .3], [zr + .13, H * .3], [zr + .03, H * .35]]]);
+      void shot;
+      return;
+    }
+    if (RA === 'pup') {
+      // 불펍: 개머리판 안에 기관부가 있고 탄창은 손잡이 뒤
+      const back = zr + .02, famas = /famas/.test(id), aug = /aug|f90/.test(id), tav = /tavor|x95|tar21|sar21/.test(id);
+      const top = aug ? H * .9 : H * 1.02;
+      c.ext(b, [[back, top], [back, -.07], [back - .02, -.08], [zr - .045, -.06], [zr - .045, -.002], [zr - .1, -.002], [-.012, -.008], [-.02, -.004], [zf + .1, -.004], [zf + .02, by - .035], [zf - .01, by - .03], [zf - .01, by + .02], [zf + .05, top], [back - .03, top + .004]], W * 1.08, M.furn);
+      c.box(b, W * 1.1, .003, L * .6, M.dark, 0, H * .3, (zr + zf) / 2 + .03);
+      if (famas) c.ext(b, [[zr - .03, H * 1.02], [zr - .03, H * 1.6], [zf + .03, H * 1.65], [zf + .02, H * 1.02]], .014, M.furn, 0, [[[zr - .06, H * 1.12], [zr - .06, H * 1.48], [zf + .06, H * 1.5], [zf + .06, H * 1.12]]]);
+      if (aug || tav) c.ext(b, [[-.02, -.008], [-.02, -.035], [zf + .1, -.04], [zf + .07, -.11], [zf + .05, -.11], [zf + .05, -.004]], .026, M.furn, 0, [[[-.03, -.012], [-.03, -.03], [zf + .1, -.034], [zf + .085, -.012]]]);
+      if (!aug && !famas) rail(c, b, zr - .02, zf + .02, 0, top, 'top', M.dark);
+      pgrip(c, b, .006, -.004, 'mod', M.furn);
+      return;
+    }
+    if (RA === 'box') {
+      c.ext(b, [[zr, H * .1], [zr, H * .85], ...arc(zr - .015, H * .85, .015, 0, PI / 2, 3), [zf + .02, H], ...arc(zf + .02, H * .5, H * .5, PI / 2, PI, 3), [zf + .02, 0], [zr, 0]], W, M.body);
+      for (let i = 0; i < 6; i++) c.box(b, W * 1.02, .003, .005, M.dark, 0, H * .9, zr - .03 - i * .012);
+      c.box(b, W * 1.03, .006, L * .5, M.dark, 0, H * .3, (zr + zf) / 2);
+      tguard(c, b, .004, -.002, M.body, true);
+      return;
+    }
+    if (RA === 'tube') {
+      const r = H * .42;
+      c.cyl(b, r, L, M.body, 0, H * .55, (zr + zf) / 2, 16);
+      const sh = id === 'sterling' || id === 'stenmk2s' || id === 'lanchester';
+      if (sh) for (let i = 0; i < 10; i++) for (let s = -1; s <= 1; s += 2) c.box(b, .003, .006, .006, M.dark, s * r * .98, H * .55, zf + .02 + i * L * .08);
+      c.box(b, W * .7, H * .5, L * .55, M.body, 0, 0, zf + L * .4);
+      if (id === 'mp40') c.ext(b, [[zf + .02, H * .3], [zf + .02, -.03], [zf - .015, -.03], [zf - .015, H * .3]], .03, M.dark);
+      tguard(c, b, .004, -.002, M.body, true);
+      pgrip(c, b, .006, -.004, 'ak', M.furn);
+      return;
+    }
+    if (RA === 'belt') {
+      c.ext(b, [[zr, H * .1], [zr, H * 1.05], [zf + .02, H * 1.08], [zf, H * .95], [zf, H * .05], [zf + .05, -.01], [zr - .02, -.01]], W * 1.05, M.body);
+      for (let i = 0; i < 4; i++) c.box(b, W * 1.08, .004, .03, M.dark, 0, H * .4, zr - .05 - i * .06);
+      const mg42 = /^(mg42|mg3|mg34|mg5|mg4)$/.test(id);
+      if (mg42) {
+        const sl = B * .7; c.cyl(b, .022, sl, M.body, 0, by, zf - sl / 2, 12);
+        for (let i = 0; i < 7; i++) for (const s of [-1, 1]) c.box(b, .004, .012, .02, M.dark, s * .021, by, zf - .03 - i * sl * .13);
+      } else if (!/m1919|maxim|vickers|sg43/.test(id)) {
+        c.ext(b, [[zf - .04, by + .02], [zf - .055, by + .07], [zf - .16, by + .07], [zf - .175, by + .02]], .012, M.dark, 0, [[[zf - .065, by + .03], [zf - .072, by + .06], [zf - .145, by + .06], [zf - .152, by + .03]]]);
+        c.ext(b, [[zf, by - .03], [zf, by + .02], [zf - Math.min(.2, B * .45), by + .02], [zf - Math.min(.2, B * .45), by - .03]], W, M.furn);
+      }
+      pgrip(c, b, .004, -.008, 'mod', M.furn); tguard(c, b, .002, -.008, M.body, true);
+      if (/pkm|pecheneg|rp46|sg43/.test(id)) c.ext(b, [[zr, H * .9], [zr + .27, H * .55], [zr + .28, H * .55], [zr + .28, -.08], [zr + .26, -.08], [zr + .05, -.02], [zr, H * .1]], W * .8, M.furn, 0, [[[zr + .03, H * .7], [zr + .25, H * .42], [zr + .25, -.04], [zr + .08, -.01], [zr + .03, H * .15]]]);
+      else if (!/m1919|maxim|vickers|m2hb|kord/.test(id)) c.ext(b, [[zr, H * .95], [zr + .27, H * .85], [zr + .28, H * .85], [zr + .28, -.08], [zr + .26, -.08], [zr + .05, -.02], [zr, H * .05]], W * .9, M.furn);
+      return;
+    }
+    // ---------- 나무 총 (옛 볼트 소총 · 반자동 소총 · 레버 · 옛 기관단총 · 옛 기관총) ----------
+    if (RA === 'wood' || RA === 'sport') {
+      const semi = g.cat === 'br' || g.cat === 'ar', smg = g.cat === 'smg', lever = g.mode === 'lever', lmg = g.cat === 'lmg';
+      const fe = smg ? Math.min(.12, B * .6) : lever ? B * .4 : semi ? B * .62 : RA === 'sport' ? B * .5 : B * .78;
+      const pg = RA === 'sport' || /^(stg44|stg45|mkb42|fedorov|m1928|thompson|m1a1t|ud42|sub2000|cx4|bar)$/.test(id);
+      const ztip = zf - fe;
+      // 개머리판 + 손목 + 앞나무가 한 덩어리
+      const pts = [
+        [zr + .33, H * .55], [zr + .34, H * .5], [zr + .34, -.088], [zr + .32, -.092],
+        pg ? [zr + .09, -.035] : [zr + .12, -.035], pg ? [zr + .05, -.09] : [zr + .05, -.03], pg ? [zr + .02, -.092] : [zr + .02, -.028],
+        [zr - .01, -.026], [zf + .04, -.026], [ztip + .03, by - .03], [ztip, by - .022], [ztip - .004, by - .006], [ztip + .004, by + .004],
+        [zf, by + .004], [zf, H * .3], [zr + .01, H * .3], [zr + .04, H * .62], [zr + .12, H * .7],
+      ];
+      c.ext(b, pts, W * .94, M.furn);
+      if (RA === 'sport') c.box(b, W * .96, .03, .14, M.furn, 0, H * .62, zr + .2);
+      // 총열 위 나무 덮개 · 총열 띠 · 앞 마개
+      if (!smg && !lever && RA !== 'sport') {
+        c.ext(b, [[zf - .02, by + .003], [zf - .02, by + .018], [ztip + .04, by + .016], [ztip + .04, by + .003]], .024, M.furn);
+        [zf - fe * .35, ztip + .02].forEach(z => c.cyl(b, .02, .012, M.metal, 0, by - .006, z, 12));
+        c.cyl(b, .014, .02, M.metal, 0, by - .004, ztip - .006, 10);
+      }
+      if (semi && !/m1carbine|m2carbine/.test(id)) c.cyl(b, .008, B * .55, M.metal, 0, by - .016, zf - B * .3);
+      if (smg && id === 'ppsh') { c.cyl(b, .02, B + .02, M.body, 0, by, zf - B / 2, 12); for (let i = 0; i < 6; i++) for (const s of [-1, 1]) c.box(b, .003, .007, .012, M.dark, s * .0195, by, zf - .015 - i * B * .15); }
+      // 몸통: 볼트 소총은 둥근 쇠통
+      if (g.mode === 'bolt') c.cyl(b, H * .36, L * .9, M.body, 0, H * .58, (zr + zf) / 2, 14);
+      else c.box(b, W * .8, H * .6, L, M.body, 0, H * .6, (zr + zf) / 2);
+      tguard(c, b, .004, -.026, M.metal, false);
+      if (lmg && /dp28|lewis/.test(id)) c.cyl(b, .03, B * .8, M.body, 0, by, zf - B * .4, 14);
+      return;
+    }
+    if (RA === 'tac' || RA === 'amr') {
+      const amr = RA === 'amr', s = amr ? 1.3 : 1;
+      // 쇠로 깎은 몸통 + 긴 레일
+      c.ext(b, [[zr, H * .1], [zr, H * 1.02], [zf, H * 1.02], [zf, H * .1]], W * 1.05 * s, M.body, 0, amr ? [[[zf + .04, H * .3], [zf + .04, H * .75], [zf + .12, H * .75], [zf + .12, H * .3]]] : null);
+      rail(c, b, zr, zf - (amr ? .1 : .05), 0, H * 1.02, 'top', M.dark);
+      const fe = Math.min(B * (amr ? .45 : .55), .3);
+      c.ext(b, [[zf, by - .03 * s], [zf, by + .025 * s], [zf - fe, by + .025 * s], [zf - fe, by - .03 * s]], .05 * s, M.body);
+      for (let i = 0; i < 5; i++) c.box(b, .052 * s, .008, .03, M.dark, 0, by - .004, zf - .03 - i * fe * .19);
+      if (amr) { c.ext(b, [[zf - B, by - .03], [zf - B, by + .03], [zf - B - .09, by + .03], [zf - B - .09, by - .03]], .05, M.dark, 0, [[[zf - B - .01, by - .02], [zf - B - .01, by + .02], [zf - B - .035, by + .02], [zf - B - .035, by - .02]], [[zf - B - .05, by - .02], [zf - B - .05, by + .02], [zf - B - .078, by + .02], [zf - B - .078, by - .02]]]); }
+      else c.cyl(b, .015, .05, M.dark, 0, by, zf - B - .02, 10);
+      pgrip(c, b, .008, -.004, 'mod', M.furn); tguard(c, b, .004, -.004, M.body, true);
+      // 엄지 구멍 개머리판 + 뺨 받침
+      c.ext(b, [[zr, H * 1.02], [zr + .3, H * 1.0], [zr + .31, H * 1.0], [zr + .31, -.09], [zr + .29, -.092], [zr + .12, -.04], [zr + .08, -.1], [zr + .05, -.102], [zr, H * .1]], W * .95, M.furn, 0,
+        [[[zr + .1, H * .85], [zr + .27, H * .84], [zr + .27, -.03], [zr + .14, -.025]], [[zr + .045, H * .5], [zr + .085, H * .5], [zr + .07, -.06], [zr + .05, -.06]]]);
+      c.box(b, W * .7, .018, .12, M.dark, 0, H * 1.12, zr + .17);
+      if (amr) c.cyl(b, .02, .06, M.dark, 0, -.02, zr + .25, 10);
+      return;
+    }
+    if (RA === 'shot') {
+      // 펌프 · 반자동 산탄총: 둥그스름한 몸통 + 나무 개머리판
+      c.ext(b, [[zr, H * .25], [zr, H * .82], ...arc(zr - .025, H * .82, .025, 0, PI / 2, 3), [zf, H * 1.03], [zf, H * .12], [zf + .04, -.004], [zr - .02, -.004]], W, M.body);
+      c.box(b, .002, H * .35, .07, M.dark, W / 2 + .0005, H * .55, zf + L * .42);
+      const pist = /^(m590a1|m590m|benellim4|b1301|m3super90|spas12|m930)$/.test(g.id);
+      tguard(c, b, .004, -.004, M.metal, false);
+      if (pist) {
+        pgrip(c, b, .008, -.004, 'mod', M.furn);
+        c.ext(b, [[zr, H * .85], [zr + .26, H * .92], [zr + .27, H * .92], [zr + .27, -.07], [zr + .25, -.07], [zr + .1, H * .05], [zr, H * .2]], W * .88, M.furn, 0, [[[zr + .04, H * .7], [zr + .2, H * .72], [zr + .21, H * .25], [zr + .1, H * .25]]]);
+      } else c.ext(b, [[zr, H * .82], [zr + .3, H * .52], [zr + .31, H * .52], [zr + .31, -.095], [zr + .29, -.098], [zr + .1, -.04], [zr + .04, -.032], [zr, -.002]], W * .9, M.furn);
+      if (g.mode !== 'pump') c.ext(b, [[zf, by - .034], [zf, by + .002], [zf - .2, by - .004], [zf - .205, by - .03], [zf - .19, by - .042]], W * .95, M.furn);
+      const bead = new THREE.Mesh(new THREE.SphereGeometry(.0028, 8, 6), BASE.brass()); bead.position.set(0, by + .016, zf - B + .006); b.add(bead);
+      return;
+    }
+  }
+  // 펌프 손잡이: 홈이 파인 둥근 앞나무
+  function realPump(c, pp, W, m) {
+    c.ext(pp, [[.07, .02], [-.07, .02], [-.078, .006], [-.078, -.022], [-.07, -.03], [.07, -.03], [.078, -.02], [.078, .01]], W * .98, m);
+    for (let i = 0; i < 7; i++) c.box(pp, W * 1.01, .032, .004, BASE.dark(), 0, -.005, -.054 + i * .018);
+  }
+  // 권총: 슬라이드 · 몸통 · 손잡이 윤곽
+  function pistolStyle(g) {
+    if (/^(glock|p320|p99|vp9|mp9mm|p365|canik|hs2000|fiveseven|grach|qsz92|k5|sr1|p7)/.test(g.id)) return 'poly';
+    return 'steel';
+  }
+  function realPistol(c, X) {
+    const { L, zR, zF, yS, sh, big, slide } = X, M = c.M, b = c.body, poly = pistolStyle(c.g) === 'poly', w = .03 * big;
+    // 슬라이드: 앞이 비스듬하게 깎이고, 오른쪽에 탄피 나가는 구멍
+    c.ext(slide, [[zR, yS - sh / 2], [zR, yS + sh / 2 - .003], [zR - .004, yS + sh / 2], [zF + .012, yS + sh / 2], [zF, yS + sh / 2 - .008], [zF, yS - sh / 2]], w, M.body);
+    c.box(slide, .002, sh * .5, .03, M.dark, w / 2 + .0005, yS + sh * .12, zR - .05);
+    // 몸통 (총열 아래 레일 포함) + 방아쇠울
+    const fy = yS - sh / 2;
+    c.ext(b, [[zR + .006, fy], [zF + .005, fy], [zF + .005, fy - .018], [zF + .03, fy - .02], [zR - .03, fy - .02], [zR - .03, fy - .012], [zR + .006, fy - .012]], w * .94, M.frame);
+    if (poly) for (let i = 0; i < 3; i++) c.box(b, w * .96, .004, .003, M.dark, 0, fy - .016, zF + .012 + i * .01);
+    const tz = -.002, ty = fy - .018;
+    c.ext(b, [[tz - .056, ty + .002], [tz - .056, ty - (poly ? .024 : .02)], [tz - (poly ? .053 : .046), ty - .026], [tz + .004, ty - .026], [tz + .004, ty + .002]], .008, M.frame, 0, [[[tz - .05, ty - .001], [tz - .05, ty - .018], [tz - .044, ty - .021], [tz - .003, ty - .021], [tz - .003, ty - .001]]]);
+    // 손잡이: 폴리머 권총은 손가락 홈, 쇠 권총은 곧고 뒤에 비버테일
+    const gp = poly ? [[.006, fy - .002], [.008, fy - .03], [.006, fy - .046], [.016, fy - .058], [.013, fy - .072], [.024, fy - .086], [.032, fy - .122], [.084, fy - .122], [.064, fy - .02], [.074, fy - .008], [.076, fy - .002]]
+      : [[.006, fy - .002], [.032, fy - .122], [.084, fy - .122], [.062, fy - .014], [.074, fy - .008], [.076, fy - .002]];
+    c.ext(b, gp, w * .95, M.furn);
+    if (!poly) c.ext(b, mv([[.014, fy - .02], [.034, fy - .112], [.074, fy - .112], [.056, fy - .02]], 0, 0), w * 1.12, c.g.m.c === 'st' ? BASE.wood() : M.dark);
+    else for (let y = fy - .032; y > fy - .115; y -= .008) c.box(b, w * .97, .003, .03, M.dark, 0, y, .04 + (fy - y) * .2);
+  }
   function addLaser(c, parent, x, y, z, s) {
     c.box(parent, s, s, .035, BASE.dark(), x, y, z);
     c.box(parent, .003, .003, .002, RED(), x, y, z - .018);
